@@ -3,23 +3,63 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>ESOP Wars</title>
+  <title>ESOP Wars - Startup Auction Game</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="app">
-    <!-- Game content rendered by JavaScript -->
-    <div class="loading">Loading...</div>
+    <div class="loading">Loading ESOP Wars...</div>
+  </div>
+
+  <!-- Registration Modal -->
+  <div id="registrationModal" class="modal">
+    <div class="modal-content registration-modal">
+      <div class="modal-header">
+        <h2 id="regModalTitle">Register Team</h2>
+        <button class="modal-close" onclick="closeRegistrationModal()">&times;</button>
+      </div>
+
+      <input type="hidden" id="regTeamIndex">
+
+      <div class="form-group">
+        <label for="regTeamName">Team Name</label>
+        <input type="text" id="regTeamName" placeholder="Enter your startup name" maxlength="30">
+      </div>
+
+      <div class="form-group">
+        <label for="regProblemStatement">Problem Statement</label>
+        <textarea id="regProblemStatement" rows="4"
+                  placeholder="What problem is your startup solving? (e.g., 'Making healthcare affordable for rural India')"></textarea>
+        <span class="form-hint">Describe the problem your startup addresses in one sentence</span>
+      </div>
+
+      <div class="modal-actions">
+        <button class="action-btn secondary" onclick="closeRegistrationModal()">Cancel</button>
+        <button class="action-btn primary" onclick="saveRegistration()">Save & Register</button>
+      </div>
+    </div>
   </div>
 
   <!-- Bid Modal -->
   <div id="bidModal" class="modal">
-    <div class="modal-content">
-      <h2 class="modal-title">Place Bid for <span id="bidTeamName"></span></h2>
+    <div class="modal-content bid-modal">
+      <div class="modal-header">
+        <h2>Place Bid for <span id="bidTeamName"></span></h2>
+        <button class="modal-close" onclick="closeBidModal()">&times;</button>
+      </div>
 
-      <div class="modal-info">
-        <p>Current Highest: <strong id="currentBidDisplay"></strong></p>
-        <p>Your Max: <strong id="maxBidDisplay"></strong></p>
+      <div class="bid-info">
+        <div class="bid-info-row">
+          <span class="bid-info-label">Current Highest</span>
+          <span class="bid-info-value" id="currentBidDisplay"></span>
+        </div>
+        <div class="bid-info-row">
+          <span class="bid-info-label">Your ESOP Available</span>
+          <span class="bid-info-value" id="maxBidDisplay"></span>
+        </div>
       </div>
 
       <div class="bid-controls">
@@ -31,13 +71,48 @@
 
         <div class="bid-input-wrapper">
           <input type="number" id="bidInput" step="0.1" min="0.5">
-          <span>%</span>
+          <span class="bid-input-suffix">%</span>
         </div>
       </div>
 
-      <div class="modal-buttons">
-        <button class="cancel-btn" onclick="closeBidModal()">Cancel</button>
-        <button class="confirm-btn" onclick="confirmBid()">Confirm Bid</button>
+      <div class="modal-actions">
+        <button class="action-btn secondary" onclick="closeBidModal()">Cancel</button>
+        <button class="action-btn primary" onclick="confirmBid()">Confirm Bid</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Team Detail Modal -->
+  <div id="teamDetailModal" class="modal">
+    <div class="modal-content team-detail-modal">
+      <div class="modal-header">
+        <h2 id="teamDetailName">Team Name</h2>
+        <button class="modal-close" onclick="closeTeamDetailModal()">&times;</button>
+      </div>
+
+      <div class="team-detail-problem">
+        <strong>Building:</strong>
+        <p id="teamDetailProblem"></p>
+      </div>
+
+      <div class="team-detail-stats">
+        <div class="detail-stat">
+          <span class="detail-stat-label">ESOP Remaining</span>
+          <span class="detail-stat-value" id="teamDetailEsop"></span>
+        </div>
+        <div class="detail-stat">
+          <span class="detail-stat-label">Valuation</span>
+          <span class="detail-stat-value" id="teamDetailValuation"></span>
+        </div>
+      </div>
+
+      <div class="team-detail-employees">
+        <h4>Team Roster</h4>
+        <div id="teamDetailEmployees"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="action-btn primary" onclick="closeTeamDetailModal()">Close</button>
       </div>
     </div>
   </div>

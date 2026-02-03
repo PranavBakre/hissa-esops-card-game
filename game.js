@@ -2,7 +2,7 @@
 
 // Game State
 let gameState = {
-  phase: 'auction', // auction | seed | early | secondary-drop | secondary-hire | mature | exit | winner
+  phase: 'registration', // registration | auction | seed | early | secondary-drop | secondary-hire | mature | exit | winner
   currentCardIndex: 0,
   teams: [],
   employeeDeck: [],
@@ -12,15 +12,18 @@ let gameState = {
   usedMarketCards: [],
   currentBid: { teamIndex: null, amount: 0 },
   exitCard: null,
-  secondaryHired: [] // Track which teams have hired in secondary auction
+  secondaryHired: [],
+  registeredTeams: 0
 };
 
 // Initialize game
 function initGame() {
-  // Initialize teams
-  gameState.teams = teamDefinitions.map((def, index) => ({
+  // Initialize teams with registration state
+  gameState.teams = teamDefinitions.map((def) => ({
     name: def.name,
     color: def.color,
+    problemStatement: '',
+    isRegistered: false,
     esopRemaining: 10,
     valuation: 25000000,
     employees: [],
@@ -36,13 +39,14 @@ function initGame() {
   gameState.marketDeck = shuffleArray([...marketCards]);
 
   // Reset other state
-  gameState.phase = 'auction';
+  gameState.phase = 'registration';
   gameState.currentCardIndex = 0;
   gameState.currentBid = { teamIndex: null, amount: 0 };
   gameState.droppedEmployees = [];
   gameState.usedMarketCards = [];
   gameState.exitCard = null;
   gameState.secondaryHired = [];
+  gameState.registeredTeams = 0;
 
   saveState();
   render();
@@ -73,6 +77,72 @@ function loadState() {
   return false;
 }
 
+// Open team registration modal
+function openRegistrationModal(teamIndex) {
+  const team = gameState.teams[teamIndex];
+  const modal = document.getElementById('registrationModal');
+
+  document.getElementById('regTeamIndex').value = teamIndex;
+  document.getElementById('regTeamName').value = team.name;
+  document.getElementById('regTeamName').style.borderColor = team.color;
+  document.getElementById('regProblemStatement').value = team.problemStatement || '';
+  document.getElementById('regModalTitle').style.color = team.color;
+  document.getElementById('regModalTitle').textContent = `Register ${team.name}`;
+
+  modal.classList.add('show');
+}
+
+// Close registration modal
+function closeRegistrationModal() {
+  document.getElementById('registrationModal').classList.remove('show');
+}
+
+// Save team registration
+function saveRegistration() {
+  const teamIndex = parseInt(document.getElementById('regTeamIndex').value);
+  const teamName = document.getElementById('regTeamName').value.trim();
+  const problemStatement = document.getElementById('regProblemStatement').value.trim();
+
+  if (!teamName) {
+    showToast('Please enter a team name!', 'error');
+    return;
+  }
+
+  if (!problemStatement) {
+    showToast('Please enter your problem statement!', 'error');
+    return;
+  }
+
+  const team = gameState.teams[teamIndex];
+  const wasRegistered = team.isRegistered;
+
+  team.name = teamName;
+  team.problemStatement = problemStatement;
+  team.isRegistered = true;
+
+  if (!wasRegistered) {
+    gameState.registeredTeams++;
+  }
+
+  saveState();
+  closeRegistrationModal();
+  render();
+
+  showToast(`${teamName} registered successfully!`, 'success');
+}
+
+// Start auction (after all teams registered)
+function startAuction() {
+  if (gameState.registeredTeams < 5) {
+    showToast('All 5 teams must register first!', 'error');
+    return;
+  }
+
+  gameState.phase = 'auction';
+  saveState();
+  render();
+}
+
 // Get current employee card
 function getCurrentCard() {
   if (gameState.phase === 'auction') {
@@ -85,7 +155,6 @@ function getCurrentCard() {
 function placeBid(teamIndex, amount) {
   const team = gameState.teams[teamIndex];
 
-  // Validation
   if (amount <= gameState.currentBid.amount) {
     showToast('Bid must be higher than current bid!', 'error');
     return false;
@@ -118,22 +187,18 @@ function closeBidding() {
   const winningTeam = gameState.teams[gameState.currentBid.teamIndex];
   const employee = getCurrentCard();
 
-  // Award employee to winner
   winningTeam.employees.push({
     ...employee,
     bidAmount: gameState.currentBid.amount
   });
   winningTeam.esopRemaining -= gameState.currentBid.amount;
-  winningTeam.esopRemaining = Math.round(winningTeam.esopRemaining * 100) / 100; // Fix floating point
+  winningTeam.esopRemaining = Math.round(winningTeam.esopRemaining * 100) / 100;
 
-  // Check if team is complete
   if (winningTeam.employees.length >= 3) {
     winningTeam.isComplete = true;
   }
 
   showToast(`${winningTeam.name} wins ${employee.name}!`, 'success');
-
-  // Move to next card
   nextCard();
 }
 
@@ -148,7 +213,6 @@ function nextCard() {
   gameState.currentCardIndex++;
   gameState.currentBid = { teamIndex: null, amount: 0 };
 
-  // Check if auction is complete
   if (gameState.currentCardIndex >= gameState.employeeDeck.length || allTeamsComplete()) {
     endAuction();
   } else {
@@ -164,7 +228,6 @@ function allTeamsComplete() {
 
 // End auction phase
 function endAuction() {
-  // Mark teams with < 3 employees as disqualified
   gameState.teams.forEach(team => {
     if (team.employees.length < 3) {
       team.isDisqualified = true;
@@ -194,7 +257,6 @@ function drawMarketCard() {
   gameState.usedMarketCards.push(card);
   gameState.currentMarketCard = card;
 
-  // Apply modifiers and calculate new valuations
   applyMarketCard(card);
 
   saveState();
@@ -209,11 +271,9 @@ function applyMarketCard(card) {
     let skillTotal = 0;
 
     team.employees.forEach(emp => {
-      // Adjusted hard skill
       const hardMod = card.hardSkillModifiers[emp.category] || 0;
       const adjustedHard = Math.min(1, Math.max(0, emp.hardSkill + hardMod));
 
-      // Adjusted soft skills
       let softTotal = 0;
       Object.entries(emp.softSkills).forEach(([skill, value]) => {
         const softMod = card.softSkillModifiers[skill] || 0;
@@ -223,7 +283,6 @@ function applyMarketCard(card) {
       skillTotal += adjustedHard + softTotal;
     });
 
-    // New valuation formula
     team.valuation = Math.round(team.valuation * (1 + skillTotal * 0.1));
   });
 }
@@ -253,11 +312,9 @@ function dropEmployee(teamIndex, employeeId) {
   gameState.droppedEmployees.push(dropped);
   team.isComplete = false;
 
-  // Check if all teams have dropped
   const allDropped = gameState.teams.every(t => t.isDisqualified || t.employees.length === 2);
   if (allDropped) {
     gameState.phase = 'secondary-hire';
-    // Add reserve employees to pool
     gameState.secondaryPool = [...gameState.droppedEmployees, ...gameState.reserveEmployees];
     gameState.secondaryHired = [];
   }
@@ -285,7 +342,6 @@ function closeSecondaryBidding() {
   const empIndex = gameState.secondaryPool.findIndex(e => e.id === gameState.selectedSecondaryCard);
   const employee = gameState.secondaryPool[empIndex];
 
-  // Award employee
   winningTeam.employees.push({
     ...employee,
     bidAmount: gameState.currentBid.amount
@@ -294,17 +350,14 @@ function closeSecondaryBidding() {
   winningTeam.esopRemaining = Math.round(winningTeam.esopRemaining * 100) / 100;
   winningTeam.isComplete = true;
 
-  // Remove from pool
   gameState.secondaryPool.splice(empIndex, 1);
   gameState.secondaryHired.push(gameState.currentBid.teamIndex);
 
-  // Reset selection
   gameState.selectedSecondaryCard = null;
   gameState.currentBid = { teamIndex: null, amount: 0 };
 
   showToast(`${winningTeam.name} wins ${employee.name}!`, 'success');
 
-  // Check if all teams have hired
   const allHired = gameState.teams.every(t => t.isDisqualified || t.employees.length === 3);
   if (allHired) {
     gameState.phase = 'mature';
@@ -319,7 +372,6 @@ function drawExitCard() {
   const card = exitCards[Math.floor(Math.random() * exitCards.length)];
   gameState.exitCard = card;
 
-  // Apply multiplier
   gameState.teams.forEach(team => {
     if (!team.isDisqualified) {
       team.valuation = Math.round(team.valuation * card.multiplier);
@@ -432,11 +484,53 @@ function confirmBid() {
   }
 }
 
+// View team details
+function viewTeamDetails(teamIndex) {
+  const team = gameState.teams[teamIndex];
+  const modal = document.getElementById('teamDetailModal');
+
+  document.getElementById('teamDetailName').textContent = team.name;
+  document.getElementById('teamDetailName').style.color = team.color;
+  document.getElementById('teamDetailProblem').textContent = team.problemStatement || 'No problem statement';
+  document.getElementById('teamDetailEsop').textContent = `${team.esopRemaining.toFixed(1)}%`;
+  document.getElementById('teamDetailValuation').textContent = formatCurrency(team.valuation);
+
+  const employeesList = document.getElementById('teamDetailEmployees');
+  if (team.employees.length === 0) {
+    employeesList.innerHTML = '<div class="no-employees">No employees hired yet</div>';
+  } else {
+    employeesList.innerHTML = team.employees.map(emp => `
+      <div class="detail-employee">
+        <div class="detail-emp-header">
+          <span class="detail-emp-name">${emp.name}</span>
+          <span class="detail-emp-category ${emp.category.toLowerCase()}">${emp.category}</span>
+        </div>
+        <div class="detail-emp-role">${emp.role}</div>
+        <div class="detail-emp-stats">
+          <span>Hard: ${emp.hardSkill.toFixed(1)}</span>
+          ${Object.entries(emp.softSkills).map(([s, v]) => `<span>${s}: ${v.toFixed(1)}</span>`).join('')}
+        </div>
+        <div class="detail-emp-bid">Hired for ${emp.bidAmount}%</div>
+      </div>
+    `).join('');
+  }
+
+  modal.classList.add('show');
+}
+
+// Close team detail modal
+function closeTeamDetailModal() {
+  document.getElementById('teamDetailModal').classList.remove('show');
+}
+
 // Main render function
 function render() {
   const app = document.getElementById('app');
 
   switch (gameState.phase) {
+    case 'registration':
+      renderRegistration(app);
+      break;
     case 'auction':
       renderAuction(app);
       break;
@@ -463,244 +557,458 @@ function render() {
   }
 }
 
+// Render registration phase
+function renderRegistration(app) {
+  app.innerHTML = `
+    <div class="game-container">
+      <header class="game-header">
+        <div class="logo">
+          <span class="logo-icon">💼</span>
+          <h1>ESOP Wars</h1>
+        </div>
+        <p class="tagline">Bid equity to build your startup team, survive market swings, exit rich.</p>
+      </header>
+
+      <main class="registration-main">
+        <div class="registration-hero">
+          <h2>Team Registration</h2>
+          <p>Register all 5 teams before starting the auction. Each team needs a name and problem statement.</p>
+          <div class="registration-progress">
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: ${(gameState.registeredTeams / 5) * 100}%"></div>
+            </div>
+            <span class="progress-text">${gameState.registeredTeams}/5 Teams Registered</span>
+          </div>
+        </div>
+
+        <div class="registration-grid">
+          ${gameState.teams.map((team, index) => `
+            <div class="registration-card ${team.isRegistered ? 'registered' : ''}" style="--team-color: ${team.color}">
+              <div class="reg-card-header">
+                <div class="reg-card-icon" style="background: ${team.color}">${team.name.charAt(0)}</div>
+                <div class="reg-card-title">
+                  <h3>${team.name}</h3>
+                  ${team.isRegistered
+                    ? '<span class="reg-status registered">Registered</span>'
+                    : '<span class="reg-status pending">Pending</span>'}
+                </div>
+              </div>
+              ${team.isRegistered ? `
+                <div class="reg-card-problem">
+                  <strong>Problem Statement:</strong>
+                  <p>${team.problemStatement}</p>
+                </div>
+              ` : ''}
+              <button class="reg-card-btn ${team.isRegistered ? 'edit' : ''}"
+                      onclick="openRegistrationModal(${index})">
+                ${team.isRegistered ? 'Edit Details' : 'Register Team'}
+              </button>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="registration-actions">
+          <button class="action-btn primary large ${gameState.registeredTeams < 5 ? 'disabled' : ''}"
+                  onclick="startAuction()"
+                  ${gameState.registeredTeams < 5 ? 'disabled' : ''}>
+            ${gameState.registeredTeams < 5
+              ? `Register ${5 - gameState.registeredTeams} More Team${5 - gameState.registeredTeams > 1 ? 's' : ''} to Start`
+              : 'Start Auction'}
+          </button>
+        </div>
+      </main>
+
+      <footer class="game-footer">
+        <div class="game-rules">
+          <h4>Quick Rules</h4>
+          <ul>
+            <li>Each team starts with 10% ESOP pool</li>
+            <li>Bid equity to hire employees (3 per team)</li>
+            <li>Market conditions affect valuations</li>
+            <li>Highest valuation at exit wins!</li>
+          </ul>
+        </div>
+      </footer>
+    </div>
+  `;
+}
+
+// Render phase bar
+function renderPhaseBar(activePhase) {
+  const phases = [
+    { id: 'registration', label: 'Register', icon: '📝' },
+    { id: 'auction', label: 'Auction', icon: '🔨' },
+    { id: 'seed', label: 'Seed', icon: '🌱' },
+    { id: 'early', label: 'Early', icon: '📈' },
+    { id: 'secondary', label: 'Secondary', icon: '🔄' },
+    { id: 'mature', label: 'Mature', icon: '🏢' },
+    { id: 'exit', label: 'Exit', icon: '🚀' }
+  ];
+
+  const phaseOrder = ['registration', 'auction', 'seed', 'early', 'secondary', 'mature', 'exit'];
+  const activeIndex = phaseOrder.indexOf(activePhase);
+
+  return `
+    <nav class="phase-nav">
+      ${phases.map((phase, idx) => {
+        let status = '';
+        if (idx < activeIndex) status = 'done';
+        else if (idx === activeIndex) status = 'active';
+        return `
+          <div class="phase-item ${status}">
+            <span class="phase-icon">${phase.icon}</span>
+            <span class="phase-label">${phase.label}</span>
+          </div>
+        `;
+      }).join('')}
+    </nav>
+  `;
+}
+
+// Render teams sidebar
+function renderTeamsSidebar() {
+  return `
+    <aside class="teams-sidebar">
+      <h3>Teams</h3>
+      ${gameState.teams.map((team, index) => `
+        <div class="sidebar-team ${team.isComplete ? 'complete' : ''} ${team.isDisqualified ? 'disqualified' : ''}"
+             style="--team-color: ${team.color}"
+             onclick="viewTeamDetails(${index})">
+          <div class="sidebar-team-header">
+            <span class="sidebar-team-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+            <span class="sidebar-team-name">${team.name}</span>
+          </div>
+          <div class="sidebar-team-stats">
+            <div class="sidebar-stat">
+              <span class="stat-icon">💰</span>
+              <span>${team.esopRemaining.toFixed(1)}%</span>
+            </div>
+            <div class="sidebar-stat">
+              <span class="stat-icon">👥</span>
+              <span>${team.employees.length}/3</span>
+            </div>
+          </div>
+          ${team.isComplete ? '<span class="sidebar-badge complete">Complete</span>' : ''}
+          ${team.isDisqualified ? '<span class="sidebar-badge dq">DQ</span>' : ''}
+        </div>
+      `).join('')}
+    </aside>
+  `;
+}
+
 // Render auction phase
 function renderAuction(app) {
   const card = getCurrentCard();
 
   app.innerHTML = `
-    <div class="phase-bar">
-      <div class="phase active">Auction</div>
-      <div class="phase">Seed</div>
-      <div class="phase">Early</div>
-      <div class="phase">Secondary</div>
-      <div class="phase">Mature</div>
-      <div class="phase">Exit</div>
-    </div>
+    <div class="game-container with-sidebar">
+      ${renderPhaseBar('auction')}
 
-    <div class="card-progress">CARD ${gameState.currentCardIndex + 1} OF ${gameState.employeeDeck.length}</div>
+      <div class="game-layout">
+        ${renderTeamsSidebar()}
 
-    <div class="employee-card">
-      <div class="card-header">
-        <span class="card-category ${card.category.toLowerCase()}">${card.category}</span>
-      </div>
-      <h2 class="card-name">${card.name}</h2>
-      <p class="card-role">${card.role}</p>
-      <div class="card-stats">
-        <div class="stat">
-          <span class="stat-label">Hard Skill</span>
-          <div class="stat-bar">
-            <div class="stat-fill" style="width: ${card.hardSkill * 100}%"></div>
-          </div>
-          <span class="stat-value">${card.hardSkill.toFixed(1)}</span>
-        </div>
-        ${Object.entries(card.softSkills).map(([skill, value]) => `
-          <div class="stat soft">
-            <span class="stat-label">${skill}</span>
-            <div class="stat-bar">
-              <div class="stat-fill" style="width: ${value * 100}%"></div>
+        <main class="game-main">
+          <div class="auction-header">
+            <div class="card-counter">
+              <span class="counter-current">${gameState.currentCardIndex + 1}</span>
+              <span class="counter-divider">/</span>
+              <span class="counter-total">${gameState.employeeDeck.length}</span>
             </div>
-            <span class="stat-value">${value.toFixed(1)}</span>
+            <h2>Talent Auction</h2>
           </div>
-        `).join('')}
+
+          <div class="auction-content">
+            <div class="employee-card">
+              <div class="card-badge ${card.category.toLowerCase()}">${card.category}</div>
+              <div class="card-avatar">
+                <span>${card.name.split(' ').map(n => n[0]).join('')}</span>
+              </div>
+              <h2 class="card-name">${card.name}</h2>
+              <p class="card-role">${card.role}</p>
+
+              <div class="card-skills">
+                <div class="skill-item primary">
+                  <div class="skill-header">
+                    <span class="skill-label">Hard Skill</span>
+                    <span class="skill-value">${card.hardSkill.toFixed(1)}</span>
+                  </div>
+                  <div class="skill-bar">
+                    <div class="skill-fill" style="width: ${card.hardSkill * 100}%"></div>
+                  </div>
+                </div>
+                ${Object.entries(card.softSkills).map(([skill, value]) => `
+                  <div class="skill-item secondary">
+                    <div class="skill-header">
+                      <span class="skill-label">${skill}</span>
+                      <span class="skill-value">${value.toFixed(1)}</span>
+                    </div>
+                    <div class="skill-bar">
+                      <div class="skill-fill" style="width: ${value * 100}%"></div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="bid-section">
+              <div class="current-bid-display ${gameState.currentBid.teamIndex !== null ? 'has-bid' : ''}">
+                ${gameState.currentBid.teamIndex !== null
+                  ? `
+                    <div class="bid-label">Current Bid</div>
+                    <div class="bid-amount">${gameState.currentBid.amount}%</div>
+                    <div class="bid-team" style="color: ${gameState.teams[gameState.currentBid.teamIndex].color}">
+                      ${gameState.teams[gameState.currentBid.teamIndex].name}
+                    </div>
+                  `
+                  : `
+                    <div class="no-bid">
+                      <span class="no-bid-icon">🔨</span>
+                      <span>No bids yet</span>
+                    </div>
+                  `}
+              </div>
+
+              <div class="bid-teams-grid">
+                ${gameState.teams.map((team, index) => `
+                  <button class="bid-team-btn ${team.isComplete ? 'complete' : ''} ${gameState.currentBid.teamIndex === index ? 'leading' : ''}"
+                          style="--team-color: ${team.color}"
+                          onclick="openBidModal(${index})"
+                          ${team.isComplete || team.esopRemaining <= gameState.currentBid.amount ? 'disabled' : ''}>
+                    <span class="btn-team-name">${team.name}</span>
+                    <span class="btn-team-esop">${team.esopRemaining.toFixed(1)}%</span>
+                    ${team.isComplete ? '<span class="btn-badge">Full</span>' : ''}
+                  </button>
+                `).join('')}
+              </div>
+
+              <div class="auction-actions">
+                <button class="action-btn primary" onclick="closeBidding()"
+                  ${gameState.currentBid.teamIndex === null ? 'disabled' : ''}>
+                  Award to Winner
+                </button>
+                <button class="action-btn secondary" onclick="skipCard()">
+                  Skip Card
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
-    </div>
-
-    <div class="current-bid">
-      ${gameState.currentBid.teamIndex !== null
-        ? `Current Bid: <strong>${gameState.currentBid.amount}%</strong>
-           <span style="color: ${gameState.teams[gameState.currentBid.teamIndex].color}">
-             (${gameState.teams[gameState.currentBid.teamIndex].name})
-           </span>`
-        : 'No bids yet'}
-    </div>
-
-    <div class="teams-row">
-      ${gameState.teams.map((team, index) => `
-        <div class="team-panel ${team.isComplete ? 'complete' : ''}" style="--team-color: ${team.color}">
-          <h3 class="team-name">${team.name}</h3>
-          <div class="team-stats">
-            <div>ESOP: ${team.esopRemaining.toFixed(1)}%</div>
-            <div>Hired: ${team.employees.length}/3</div>
-          </div>
-          ${team.isComplete
-            ? '<div class="team-badge complete">COMPLETE</div>'
-            : `<button class="bid-button" onclick="openBidModal(${index})"
-                ${team.esopRemaining <= gameState.currentBid.amount ? 'disabled' : ''}>
-                BID
-              </button>`
-          }
-        </div>
-      `).join('')}
-    </div>
-
-    <div class="action-buttons">
-      <button class="action-btn primary" onclick="closeBidding()"
-        ${gameState.currentBid.teamIndex === null ? 'disabled' : ''}>
-        CLOSE BIDDING
-      </button>
-      <button class="action-btn secondary" onclick="skipCard()">
-        SKIP CARD
-      </button>
     </div>
   `;
 }
 
 // Render auction summary
 function renderAuctionSummary(app) {
-  const hasDisqualified = gameState.teams.some(t => t.isDisqualified);
-
   app.innerHTML = `
-    <div class="summary-screen">
-      <h1>Auction Complete!</h1>
+    <div class="game-container">
+      ${renderPhaseBar('auction')}
 
-      <div class="summary-teams">
-        ${gameState.teams.map(team => `
-          <div class="summary-team ${team.isDisqualified ? 'disqualified' : ''}"
-               style="--team-color: ${team.color}">
-            <h3>${team.name} ${team.isDisqualified ? '<span class="dq-badge">DISQUALIFIED</span>' : ''}</h3>
-            <div class="summary-esop">ESOP Remaining: ${team.esopRemaining.toFixed(1)}%</div>
-            <div class="summary-employees">
-              ${team.employees.map(emp => `
-                <div class="summary-emp">
-                  <span>${emp.name}</span>
-                  <span class="emp-role">${emp.role}</span>
-                  <span class="emp-bid">${emp.bidAmount}%</span>
+      <main class="summary-main">
+        <div class="summary-header">
+          <h1>Auction Complete!</h1>
+          <p>Review your teams before entering the market rounds</p>
+        </div>
+
+        <div class="summary-grid">
+          ${gameState.teams.map(team => `
+            <div class="summary-card ${team.isDisqualified ? 'disqualified' : ''}" style="--team-color: ${team.color}">
+              <div class="summary-card-header">
+                <div class="summary-team-icon" style="background: ${team.color}">${team.name.charAt(0)}</div>
+                <div>
+                  <h3>${team.name}</h3>
+                  ${team.isDisqualified
+                    ? '<span class="dq-badge">DISQUALIFIED</span>'
+                    : `<span class="esop-remaining">${team.esopRemaining.toFixed(1)}% ESOP remaining</span>`}
                 </div>
-              `).join('')}
-              ${team.employees.length < 3 ? `
-                <div class="summary-emp missing">
-                  ${3 - team.employees.length} employee(s) missing
-                </div>
-              ` : ''}
+              </div>
+
+              <div class="summary-problem">
+                <strong>Building:</strong> ${team.problemStatement}
+              </div>
+
+              <div class="summary-roster">
+                <h4>Team Roster</h4>
+                ${team.employees.length > 0 ? team.employees.map(emp => `
+                  <div class="summary-employee">
+                    <span class="emp-name">${emp.name}</span>
+                    <span class="emp-category ${emp.category.toLowerCase()}">${emp.category}</span>
+                    <span class="emp-cost">${emp.bidAmount}%</span>
+                  </div>
+                `).join('') : '<div class="no-employees">No employees hired</div>'}
+                ${team.employees.length < 3 && !team.isDisqualified ? `
+                  <div class="missing-slots">${3 - team.employees.length} slot(s) missing</div>
+                ` : ''}
+              </div>
             </div>
-          </div>
-        `).join('')}
-      </div>
+          `).join('')}
+        </div>
 
-      <button class="action-btn primary large" onclick="startMarketRounds()">
-        START MARKET ROUNDS
-      </button>
+        <div class="summary-actions">
+          <button class="action-btn primary large" onclick="startMarketRounds()">
+            Enter Market Rounds
+          </button>
+        </div>
+      </main>
     </div>
   `;
 }
 
 // Render market round
 function renderMarketRound(app) {
-  const phaseNames = { seed: 'SEED ROUND', early: 'EARLY SCALING', mature: 'MATURE SCALING' };
-  const phaseName = phaseNames[gameState.phase];
+  const phaseNames = { seed: 'Seed Round', early: 'Early Scaling', mature: 'Mature Scaling' };
+  const phaseDescriptions = {
+    seed: 'Your startup is just getting started. First market conditions apply.',
+    early: 'Growing fast! Market dynamics shift.',
+    mature: 'Final market conditions before exit.'
+  };
 
   const sortedTeams = [...gameState.teams]
     .filter(t => !t.isDisqualified)
     .sort((a, b) => b.valuation - a.valuation);
 
   app.innerHTML = `
-    <div class="phase-bar">
-      <div class="phase done">Auction</div>
-      <div class="phase ${gameState.phase === 'seed' ? 'active' : 'done'}">Seed</div>
-      <div class="phase ${gameState.phase === 'early' ? 'active' : (gameState.phase === 'mature' ? 'done' : '')}">Early</div>
-      <div class="phase ${gameState.phase === 'mature' ? 'done' : ''}">Secondary</div>
-      <div class="phase ${gameState.phase === 'mature' ? 'active' : ''}">Mature</div>
-      <div class="phase">Exit</div>
+    <div class="game-container with-sidebar">
+      ${renderPhaseBar(gameState.phase)}
+
+      <div class="game-layout">
+        ${renderTeamsSidebar()}
+
+        <main class="game-main">
+          <div class="market-header">
+            <h1>${phaseNames[gameState.phase]}</h1>
+            <p>${phaseDescriptions[gameState.phase]}</p>
+          </div>
+
+          ${!gameState.currentMarketCard ? `
+            <div class="market-draw-section">
+              <div class="draw-card-placeholder">
+                <span class="draw-icon">🎴</span>
+                <p>Draw a market condition card to see how the market affects your valuations</p>
+                <button class="action-btn primary large" onclick="drawMarketCard()">
+                  Draw Market Card
+                </button>
+              </div>
+            </div>
+          ` : `
+            <div class="market-result">
+              <div class="market-card-display">
+                <div class="market-card-icon">📊</div>
+                <h2>${gameState.currentMarketCard.name}</h2>
+                <p class="market-card-desc">${gameState.currentMarketCard.description}</p>
+
+                <div class="modifiers-grid">
+                  <div class="modifier-section">
+                    <h4>Category Modifiers</h4>
+                    <div class="modifier-list">
+                      ${Object.entries(gameState.currentMarketCard.hardSkillModifiers).map(([cat, mod]) => `
+                        <div class="modifier ${mod > 0 ? 'positive' : (mod < 0 ? 'negative' : 'neutral')}">
+                          <span class="mod-name">${cat}</span>
+                          <span class="mod-value">${mod > 0 ? '+' : ''}${mod}</span>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                  <div class="modifier-section">
+                    <h4>Soft Skill Modifiers</h4>
+                    <div class="modifier-list">
+                      ${Object.entries(gameState.currentMarketCard.softSkillModifiers).map(([skill, mod]) => `
+                        <div class="modifier ${mod > 0 ? 'positive' : (mod < 0 ? 'negative' : 'neutral')}">
+                          <span class="mod-name">${skill}</span>
+                          <span class="mod-value">${mod > 0 ? '+' : ''}${mod}</span>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="leaderboard-section">
+                <h3>Leaderboard</h3>
+                <div class="leaderboard">
+                  ${sortedTeams.map((team, idx) => `
+                    <div class="lb-entry ${idx === 0 ? 'leader' : ''}" style="--team-color: ${team.color}">
+                      <span class="lb-rank">${idx + 1}</span>
+                      <span class="lb-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+                      <span class="lb-name">${team.name}</span>
+                      <span class="lb-value">${formatCurrency(team.valuation)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="market-actions">
+                <button class="action-btn primary large" onclick="nextRound()">
+                  ${gameState.phase === 'early' ? 'Start Secondary Auction' :
+                    gameState.phase === 'mature' ? 'Proceed to Exit' : 'Next Round'}
+                </button>
+              </div>
+            </div>
+          `}
+        </main>
+      </div>
     </div>
-
-    <h1 class="round-title">${phaseName}</h1>
-
-    ${!gameState.currentMarketCard ? `
-      <div class="market-draw">
-        <p>Draw a market condition card to see how the market affects your team!</p>
-        <button class="action-btn primary large" onclick="drawMarketCard()">
-          DRAW MARKET CARD
-        </button>
-      </div>
-    ` : `
-      <div class="market-card">
-        <h2>${gameState.currentMarketCard.name}</h2>
-        <p class="market-desc">${gameState.currentMarketCard.description}</p>
-        <div class="modifiers">
-          <div class="mod-section">
-            <h4>Hard Skill Modifiers</h4>
-            ${Object.entries(gameState.currentMarketCard.hardSkillModifiers).map(([cat, mod]) => `
-              <div class="mod ${mod > 0 ? 'positive' : (mod < 0 ? 'negative' : '')}">
-                ${cat}: ${mod > 0 ? '+' : ''}${mod}
-              </div>
-            `).join('')}
-          </div>
-          <div class="mod-section">
-            <h4>Soft Skill Modifiers</h4>
-            ${Object.entries(gameState.currentMarketCard.softSkillModifiers).map(([skill, mod]) => `
-              <div class="mod ${mod > 0 ? 'positive' : (mod < 0 ? 'negative' : '')}">
-                ${skill}: ${mod > 0 ? '+' : ''}${mod}
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      </div>
-
-      <div class="leaderboard">
-        <h3>Leaderboard</h3>
-        ${sortedTeams.map((team, idx) => `
-          <div class="lb-row" style="--team-color: ${team.color}">
-            <span class="lb-rank">#${idx + 1}</span>
-            <span class="lb-name">${team.name}</span>
-            <span class="lb-val">${formatCurrency(team.valuation)}</span>
-          </div>
-        `).join('')}
-      </div>
-
-      <button class="action-btn primary large" onclick="nextRound()">
-        ${gameState.phase === 'early' ? 'START SECONDARY AUCTION' :
-          gameState.phase === 'mature' ? 'PROCEED TO EXIT' : 'NEXT ROUND'}
-      </button>
-    `}
   `;
 }
 
 // Render secondary drop phase
 function renderSecondaryDrop(app) {
   app.innerHTML = `
-    <div class="phase-bar">
-      <div class="phase done">Auction</div>
-      <div class="phase done">Seed</div>
-      <div class="phase done">Early</div>
-      <div class="phase active">Secondary</div>
-      <div class="phase">Mature</div>
-      <div class="phase">Exit</div>
-    </div>
+    <div class="game-container">
+      ${renderPhaseBar('secondary')}
 
-    <h1 class="round-title">SECONDARY AUCTION - Drop Phase</h1>
-    <p class="round-subtitle">Each team must drop 1 employee to the talent pool</p>
+      <main class="secondary-main">
+        <div class="secondary-header">
+          <h1>Secondary Auction - Drop Phase</h1>
+          <p>Each team must release one employee to the talent pool</p>
+        </div>
 
-    <div class="drop-teams">
-      ${gameState.teams.filter(t => !t.isDisqualified).map((team, teamIdx) => `
-        <div class="drop-team" style="--team-color: ${team.color}">
-          <h3>${team.name} ${team.employees.length === 2 ? '<span class="dropped-badge">DROPPED</span>' : ''}</h3>
-          <div class="drop-employees">
-            ${team.employees.map(emp => `
-              <div class="drop-emp">
+        <div class="drop-grid">
+          ${gameState.teams.filter(t => !t.isDisqualified).map((team, teamIdx) => `
+            <div class="drop-card ${team.employees.length === 2 ? 'dropped' : ''}" style="--team-color: ${team.color}">
+              <div class="drop-card-header">
+                <div class="drop-team-icon" style="background: ${team.color}">${team.name.charAt(0)}</div>
                 <div>
-                  <strong>${emp.name}</strong>
-                  <span class="emp-role">${emp.role}</span>
+                  <h3>${team.name}</h3>
+                  ${team.employees.length === 2
+                    ? '<span class="drop-status done">Employee Dropped</span>'
+                    : '<span class="drop-status pending">Select to Drop</span>'}
                 </div>
-                ${team.employees.length > 2 ? `
-                  <button class="drop-btn" onclick="dropEmployee(${teamIdx}, ${emp.id})">DROP</button>
-                ` : ''}
+              </div>
+
+              <div class="drop-employees">
+                ${team.employees.map(emp => `
+                  <div class="drop-employee">
+                    <div class="drop-emp-info">
+                      <span class="drop-emp-name">${emp.name}</span>
+                      <span class="drop-emp-role">${emp.role}</span>
+                    </div>
+                    ${team.employees.length > 2 ? `
+                      <button class="drop-btn" onclick="dropEmployee(${teamIdx}, ${emp.id})">
+                        Drop
+                      </button>
+                    ` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="talent-pool-section">
+          <h3>Talent Pool</h3>
+          <p>${gameState.droppedEmployees.length} employees available</p>
+          <div class="pool-grid">
+            ${gameState.droppedEmployees.map(emp => `
+              <div class="pool-employee">
+                <span class="pool-emp-name">${emp.name}</span>
+                <span class="pool-emp-category ${emp.category.toLowerCase()}">${emp.category}</span>
               </div>
             `).join('')}
+            ${gameState.droppedEmployees.length === 0 ? '<div class="pool-empty">Waiting for teams to drop employees...</div>' : ''}
           </div>
         </div>
-      `).join('')}
-    </div>
-
-    <div class="talent-pool">
-      <h3>Talent Pool (${gameState.droppedEmployees.length} dropped)</h3>
-      <div class="pool-cards">
-        ${gameState.droppedEmployees.map(emp => `
-          <div class="pool-card">
-            <strong>${emp.name}</strong>
-            <span>${emp.role}</span>
-          </div>
-        `).join('')}
-      </div>
+      </main>
     </div>
   `;
 }
@@ -711,77 +1019,81 @@ function renderSecondaryHire(app) {
   const selectedCard = availableCards.find(e => e.id === gameState.selectedSecondaryCard);
 
   app.innerHTML = `
-    <div class="phase-bar">
-      <div class="phase done">Auction</div>
-      <div class="phase done">Seed</div>
-      <div class="phase done">Early</div>
-      <div class="phase active">Secondary</div>
-      <div class="phase">Mature</div>
-      <div class="phase">Exit</div>
-    </div>
+    <div class="game-container with-sidebar">
+      ${renderPhaseBar('secondary')}
 
-    <h1 class="round-title">SECONDARY AUCTION - Hiring Phase</h1>
-    <p class="round-subtitle">Select a card and bid to hire. Each team hires 1 employee.</p>
+      <div class="game-layout">
+        ${renderTeamsSidebar()}
 
-    <div class="secondary-pool">
-      ${availableCards.map(emp => `
-        <div class="secondary-card ${gameState.selectedSecondaryCard === emp.id ? 'selected' : ''}"
-             onclick="selectSecondaryCard(${emp.id})">
-          <span class="card-category ${emp.category.toLowerCase()}">${emp.category}</span>
-          <h3>${emp.name}</h3>
-          <p>${emp.role}</p>
-          <div class="mini-stats">
-            <span>Hard: ${emp.hardSkill.toFixed(1)}</span>
-            ${Object.entries(emp.softSkills).map(([s, v]) => `<span>${s}: ${v.toFixed(1)}</span>`).join('')}
+        <main class="game-main">
+          <div class="secondary-hire-header">
+            <h1>Secondary Auction - Hiring Phase</h1>
+            <p>Select a candidate and bid to hire. Each team hires one employee.</p>
           </div>
-        </div>
-      `).join('')}
-    </div>
 
-    ${selectedCard ? `
-      <div class="current-bid">
-        Bidding on: <strong>${selectedCard.name}</strong>
-        ${gameState.currentBid.teamIndex !== null
-          ? ` — Current Bid: <strong>${gameState.currentBid.amount}%</strong>
-             <span style="color: ${gameState.teams[gameState.currentBid.teamIndex].color}">
-               (${gameState.teams[gameState.currentBid.teamIndex].name})
-             </span>`
-          : ' — No bids yet'}
-      </div>
-    ` : ''}
+          <div class="hire-pool">
+            ${availableCards.map(emp => `
+              <div class="hire-card ${gameState.selectedSecondaryCard === emp.id ? 'selected' : ''}"
+                   onclick="selectSecondaryCard(${emp.id})">
+                <div class="hire-card-badge ${emp.category.toLowerCase()}">${emp.category}</div>
+                <h4>${emp.name}</h4>
+                <p>${emp.role}</p>
+                <div class="hire-card-stats">
+                  <span>Hard: ${emp.hardSkill.toFixed(1)}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
 
-    <div class="teams-row">
-      ${gameState.teams.map((team, index) => {
-        const hasHired = gameState.secondaryHired.includes(index);
-        const canBid = !team.isDisqualified && !hasHired && team.employees.length < 3;
-        return `
-          <div class="team-panel ${hasHired ? 'complete' : ''}" style="--team-color: ${team.color}">
-            <h3 class="team-name">${team.name}</h3>
-            <div class="team-stats">
-              <div>ESOP: ${team.esopRemaining.toFixed(1)}%</div>
-              <div>Hired: ${team.employees.length}/3</div>
+          ${selectedCard ? `
+            <div class="hire-bid-section">
+              <div class="selected-candidate">
+                <h3>Bidding on: ${selectedCard.name}</h3>
+                <p>${selectedCard.role} - ${selectedCard.category}</p>
+              </div>
+
+              <div class="current-bid-display ${gameState.currentBid.teamIndex !== null ? 'has-bid' : ''}">
+                ${gameState.currentBid.teamIndex !== null
+                  ? `
+                    <div class="bid-amount">${gameState.currentBid.amount}%</div>
+                    <div class="bid-team" style="color: ${gameState.teams[gameState.currentBid.teamIndex].color}">
+                      ${gameState.teams[gameState.currentBid.teamIndex].name}
+                    </div>
+                  `
+                  : '<div class="no-bid">No bids yet</div>'}
+              </div>
+
+              <div class="bid-teams-grid">
+                ${gameState.teams.map((team, index) => {
+                  const hasHired = gameState.secondaryHired.includes(index);
+                  const canBid = !team.isDisqualified && !hasHired && team.employees.length < 3;
+                  return `
+                    <button class="bid-team-btn ${hasHired ? 'complete' : ''}"
+                            style="--team-color: ${team.color}"
+                            onclick="openBidModal(${index})"
+                            ${!canBid || team.esopRemaining <= gameState.currentBid.amount ? 'disabled' : ''}>
+                      <span class="btn-team-name">${team.name}</span>
+                      <span class="btn-team-esop">${team.esopRemaining.toFixed(1)}%</span>
+                      ${hasHired ? '<span class="btn-badge">Hired</span>' : ''}
+                    </button>
+                  `;
+                }).join('')}
+              </div>
+
+              ${gameState.currentBid.teamIndex !== null ? `
+                <button class="action-btn primary" onclick="closeSecondaryBidding()">
+                  Award to Winner
+                </button>
+              ` : ''}
             </div>
-            ${hasHired
-              ? '<div class="team-badge complete">HIRED</div>'
-              : canBid && gameState.selectedSecondaryCard
-                ? `<button class="bid-button" onclick="openBidModal(${index})"
-                    ${team.esopRemaining <= gameState.currentBid.amount ? 'disabled' : ''}>
-                    BID
-                  </button>`
-                : '<div class="team-badge">SELECT CARD</div>'
-            }
-          </div>
-        `;
-      }).join('')}
-    </div>
-
-    ${gameState.selectedSecondaryCard && gameState.currentBid.teamIndex !== null ? `
-      <div class="action-buttons">
-        <button class="action-btn primary" onclick="closeSecondaryBidding()">
-          CLOSE BIDDING
-        </button>
+          ` : `
+            <div class="select-prompt">
+              <p>Select a candidate above to start bidding</p>
+            </div>
+          `}
+        </main>
       </div>
-    ` : ''}
+    </div>
   `;
 }
 
@@ -792,57 +1104,68 @@ function renderExit(app) {
     .sort((a, b) => b.valuation - a.valuation);
 
   app.innerHTML = `
-    <div class="phase-bar">
-      <div class="phase done">Auction</div>
-      <div class="phase done">Seed</div>
-      <div class="phase done">Early</div>
-      <div class="phase done">Secondary</div>
-      <div class="phase done">Mature</div>
-      <div class="phase active">Exit</div>
+    <div class="game-container">
+      ${renderPhaseBar('exit')}
+
+      <main class="exit-main">
+        <div class="exit-header">
+          <h1>Exit Round</h1>
+          <p>The moment of truth! Your exit type determines your final multiplier.</p>
+        </div>
+
+        ${!gameState.exitCard ? `
+          <div class="exit-draw-section">
+            <div class="exit-draw-card">
+              <span class="exit-icon">🚀</span>
+              <p>Draw an exit card to determine your company's fate</p>
+              <button class="action-btn primary large" onclick="drawExitCard()">
+                Draw Exit Card
+              </button>
+            </div>
+
+            <div class="pre-exit-standings">
+              <h3>Current Standings</h3>
+              <div class="standings-list">
+                ${sortedTeams.map((team, idx) => `
+                  <div class="standing-entry" style="--team-color: ${team.color}">
+                    <span class="standing-rank">#${idx + 1}</span>
+                    <span class="standing-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+                    <span class="standing-name">${team.name}</span>
+                    <span class="standing-value">${formatCurrency(team.valuation)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        ` : `
+          <div class="exit-result">
+            <div class="exit-card-reveal">
+              <div class="exit-type">${gameState.exitCard.name}</div>
+              <div class="exit-multiplier">${gameState.exitCard.multiplier}x</div>
+              <p class="exit-desc">${gameState.exitCard.description}</p>
+            </div>
+
+            <div class="final-standings">
+              <h3>Final Valuations</h3>
+              <div class="standings-list final">
+                ${sortedTeams.map((team, idx) => `
+                  <div class="standing-entry ${idx === 0 ? 'winner' : ''}" style="--team-color: ${team.color}">
+                    <span class="standing-rank">#${idx + 1}</span>
+                    <span class="standing-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+                    <span class="standing-name">${team.name}</span>
+                    <span class="standing-value">${formatCurrency(team.valuation)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <button class="action-btn primary large" onclick="declareWinner()">
+              Declare Winner
+            </button>
+          </div>
+        `}
+      </main>
     </div>
-
-    <h1 class="round-title">EXIT ROUND</h1>
-
-    ${!gameState.exitCard ? `
-      <div class="exit-draw">
-        <p>The moment of truth! Draw an exit card to determine your final multiplier.</p>
-        <button class="action-btn primary large" onclick="drawExitCard()">
-          DRAW EXIT CARD
-        </button>
-      </div>
-
-      <div class="leaderboard">
-        <h3>Current Standings</h3>
-        ${sortedTeams.map((team, idx) => `
-          <div class="lb-row" style="--team-color: ${team.color}">
-            <span class="lb-rank">#${idx + 1}</span>
-            <span class="lb-name">${team.name}</span>
-            <span class="lb-val">${formatCurrency(team.valuation)}</span>
-          </div>
-        `).join('')}
-      </div>
-    ` : `
-      <div class="exit-card">
-        <h2>${gameState.exitCard.name}</h2>
-        <div class="exit-multiplier">${gameState.exitCard.multiplier}x</div>
-        <p>${gameState.exitCard.description}</p>
-      </div>
-
-      <div class="leaderboard final">
-        <h3>Final Valuations</h3>
-        ${sortedTeams.map((team, idx) => `
-          <div class="lb-row ${idx === 0 ? 'winner' : ''}" style="--team-color: ${team.color}">
-            <span class="lb-rank">#${idx + 1}</span>
-            <span class="lb-name">${team.name}</span>
-            <span class="lb-val">${formatCurrency(team.valuation)}</span>
-          </div>
-        `).join('')}
-      </div>
-
-      <button class="action-btn primary large" onclick="declareWinner()">
-        DECLARE WINNER
-      </button>
-    `}
   `;
 }
 
@@ -854,34 +1177,51 @@ function renderWinner(app) {
     .sort((a, b) => b.valuation - a.valuation);
 
   app.innerHTML = `
-    <div class="winner-screen">
-      <div class="confetti"></div>
-      <h1 class="winner-title">🏆 WINNER 🏆</h1>
-      <div class="winner-name" style="color: ${winner.color}">${winner.name}</div>
-      <div class="winner-valuation">${formatCurrency(winner.valuation)}</div>
-
-      <div class="winner-journey">
-        <h3>The Journey</h3>
-        <div class="journey-line">
-          <span>Starting: ₹25M</span>
-          <span>→</span>
-          <span>Final: ${formatCurrency(winner.valuation)}</span>
+    <div class="winner-container">
+      <div class="winner-celebration">
+        <div class="trophy">🏆</div>
+        <h1 class="winner-title">Winner!</h1>
+        <div class="winner-team" style="color: ${winner.color}">${winner.name}</div>
+        <div class="winner-valuation">${formatCurrency(winner.valuation)}</div>
+        <div class="winner-problem">
+          <strong>Building:</strong> ${winner.problemStatement}
         </div>
       </div>
 
-      <div class="final-leaderboard">
-        <h3>Final Standings</h3>
+      <div class="winner-journey">
+        <h3>The Journey</h3>
+        <div class="journey-stats">
+          <div class="journey-stat">
+            <span class="journey-label">Started</span>
+            <span class="journey-value">₹25M</span>
+          </div>
+          <div class="journey-arrow">→</div>
+          <div class="journey-stat">
+            <span class="journey-label">Final</span>
+            <span class="journey-value highlight">${formatCurrency(winner.valuation)}</span>
+          </div>
+        </div>
+        <div class="journey-growth">
+          ${((winner.valuation / 25000000 - 1) * 100).toFixed(0)}% Growth
+        </div>
+      </div>
+
+      <div class="final-rankings">
+        <h3>Final Rankings</h3>
         ${sortedTeams.map((team, idx) => `
-          <div class="final-row ${idx === 0 ? 'winner' : ''}" style="--team-color: ${team.color}">
-            <span class="rank">#${idx + 1}</span>
-            <span class="name">${team.name}</span>
-            <span class="val">${formatCurrency(team.valuation)}</span>
+          <div class="final-rank-entry ${idx === 0 ? 'first' : ''}" style="--team-color: ${team.color}">
+            <span class="final-rank">${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}</span>
+            <div class="final-rank-team">
+              <span class="final-rank-name">${team.name}</span>
+              <span class="final-rank-problem">${team.problemStatement}</span>
+            </div>
+            <span class="final-rank-value">${formatCurrency(team.valuation)}</span>
           </div>
         `).join('')}
       </div>
 
       <button class="action-btn primary large" onclick="resetGame()">
-        PLAY AGAIN
+        Play Again
       </button>
     </div>
   `;
