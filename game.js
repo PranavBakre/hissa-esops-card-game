@@ -23,7 +23,9 @@ let gameState = {
   setupPhase: 'drop', // 'drop' | 'draw'
   segmentDeck: [],
   ideaDeck: [],
-  setupDiscard: []
+  setupDiscard: [],
+  // Iteration 5: Market Leader Bonus
+  roundPerformance: []
 };
 
 // Initialize game
@@ -47,7 +49,13 @@ function initGame() {
     setupHand: [],
     lockedSegment: null,
     lockedIdea: null,
-    setupBonus: null
+    setupBonus: null,
+    // Iteration 5: Market Leader Bonus
+    previousValuation: 20000000,
+    currentGain: 0,
+    isMarketLeader: false,
+    marketLeaderCount: 0,
+    valuationBeforeBonus: 0
   }));
 
   // Shuffle and set up employee deck
@@ -76,6 +84,8 @@ function initGame() {
   gameState.segmentDeck = [];
   gameState.ideaDeck = [];
   gameState.setupDiscard = [];
+  // Iteration 5: Market Leader Bonus
+  gameState.roundPerformance = [];
 
   saveState();
   render();
@@ -525,10 +535,20 @@ function hasCategoryPerk(team, category) {
 
 // Apply market card modifiers
 function applyMarketCard(card) {
+  // Iteration 5: Store previous valuations and reset market leader status
+  gameState.teams.forEach(team => {
+    if (!team.isDisqualified) {
+      team.previousValuation = team.valuation;
+      team.isMarketLeader = false;
+      team.currentGain = 0;
+      team.valuationBeforeBonus = 0;
+    }
+  });
+
   gameState.teams.forEach(team => {
     if (team.isDisqualified) return;
 
-    const previousValuation = team.valuation;
+    const previousValuation = team.previousValuation;
     let skillTotal = 0;
 
     // Iteration 4: Check for category perks
@@ -617,8 +637,137 @@ function applyMarketCard(card) {
 
     team.valuation = newValuation;
     team.lastChange = change;
+    team.currentGain = change; // Iteration 5: Track gain for market leader calculation
     team.wildcardActiveThisRound = null; // Clear for next round
   });
+
+  // Iteration 5: Apply Market Leader Bonus
+  applyMarketLeaderBonus();
+}
+
+// Iteration 5: Apply Market Leader Bonus to top 2 teams by gains
+function applyMarketLeaderBonus() {
+  // Get active teams with their gains
+  const teamGains = gameState.teams
+    .map((team, idx) => ({
+      teamIndex: idx,
+      gain: team.isDisqualified ? -Infinity : team.currentGain,
+      valuation: team.valuation, // For tiebreaker
+      team: team
+    }))
+    .filter(t => !t.team.isDisqualified)
+    .sort((a, b) => {
+      // Sort by gain descending, use valuation as tiebreaker
+      if (b.gain !== a.gain) return b.gain - a.gain;
+      return b.valuation - a.valuation;
+    });
+
+  // Top 2 teams get valuation doubled (or fewer if less than 2 active teams)
+  const leadersCount = Math.min(2, teamGains.length);
+  const marketLeaders = teamGains.slice(0, leadersCount);
+
+  marketLeaders.forEach(leader => {
+    const team = gameState.teams[leader.teamIndex];
+
+    // Store pre-bonus valuation for UI display
+    team.valuationBeforeBonus = team.valuation;
+
+    // Double the valuation
+    team.valuation = team.valuation * 2;
+    team.isMarketLeader = true;
+    team.marketLeaderCount = (team.marketLeaderCount || 0) + 1;
+
+    // Update lastChange to include bonus
+    team.lastChange = team.valuation - team.previousValuation;
+  });
+
+  // Store round performance for history
+  const roundData = {
+    round: gameState.phase,
+    marketCard: gameState.currentMarketCard.name,
+    gains: teamGains.map(t => ({
+      teamIndex: t.teamIndex,
+      teamName: t.team.name,
+      baseGain: t.gain,
+      isMarketLeader: t.team.isMarketLeader,
+      finalValuation: t.team.valuation
+    }))
+  };
+
+  gameState.roundPerformance = gameState.roundPerformance || [];
+  gameState.roundPerformance.push(roundData);
+}
+
+// Iteration 5: Get round performance summary for UI
+function getRoundPerformanceSummary() {
+  return gameState.teams
+    .map((team, idx) => ({
+      teamIndex: idx,
+      name: team.name,
+      color: team.color,
+      previousValuation: team.previousValuation,
+      baseGain: team.currentGain,
+      isMarketLeader: team.isMarketLeader,
+      finalValuation: team.valuation,
+      bonusAmount: team.isMarketLeader ? team.valuationBeforeBonus : 0,
+      isDisqualified: team.isDisqualified
+    }))
+    .filter(t => !t.isDisqualified)
+    .sort((a, b) => b.baseGain - a.baseGain);
+}
+
+// Iteration 5: Render market leaders announcement
+function renderMarketLeadersAnnouncement() {
+  const performance = getRoundPerformanceSummary();
+  const marketLeaders = performance.filter(p => p.isMarketLeader);
+
+  if (marketLeaders.length === 0) return '';
+
+  return `
+    <div class="market-leaders-announcement">
+      <div class="leaders-icon">🚀</div>
+      <h3>Market Leaders!</h3>
+      <p>${marketLeaders.map(l => l.name).join(' and ')} led this round!</p>
+      <p class="leaders-subtitle">Valuations DOUBLED!</p>
+      <div class="leaders-bonus">
+        ${marketLeaders.map(l => `
+          <div class="leader-bonus-item" style="--team-color: ${l.color}">
+            <span class="leader-name">${l.name}</span>
+            <span class="leader-calc">
+              ${formatCurrency(l.bonusAmount)} → ${formatCurrency(l.finalValuation)}
+            </span>
+            <span class="leader-badge">2x</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// Iteration 5: Render round performance list
+function renderRoundPerformance() {
+  const performance = getRoundPerformanceSummary();
+
+  return `
+    <div class="round-performance">
+      <h3>Round Performance</h3>
+      <div class="performance-list">
+        ${performance.map((p, idx) => `
+          <div class="performance-entry ${p.isMarketLeader ? 'market-leader' : ''}"
+               style="--team-color: ${p.color}">
+            <span class="perf-rank">${p.isMarketLeader ? '🚀' : ''} #${idx + 1}</span>
+            <span class="perf-icon" style="background: ${p.color}">${p.name.charAt(0)}</span>
+            <span class="perf-name">${p.name}</span>
+            <span class="perf-gain ${p.baseGain >= 0 ? 'positive' : 'negative'}">
+              ${p.baseGain >= 0 ? '+' : ''}${formatCurrency(p.baseGain)}
+            </span>
+            <span class="perf-final">${formatCurrency(p.finalValuation)}</span>
+            ${p.isMarketLeader ? '<span class="perf-bonus">[2x]</span>' : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
 // Iteration 2: Start wildcard decision phase
@@ -1238,6 +1387,11 @@ function renderTeamsSidebar() {
                 🃏 ${team.wildcardUsed ? 'Used' : 'Ready'}
               </div>
             ` : ''}
+            ${team.marketLeaderCount > 0 ? `
+              <div class="sidebar-market-leader">
+                🚀 Leader <span class="leader-count">${team.marketLeaderCount}x</span>
+              </div>
+            ` : ''}
           </div>
         `;
       }).join('')}
@@ -1483,15 +1637,20 @@ function renderMarketRound(app) {
                 </div>
               </div>
 
+              ${renderMarketLeadersAnnouncement()}
+
+              ${renderRoundPerformance()}
+
               <div class="leaderboard-section">
-                <h3>Leaderboard</h3>
+                <h3>Overall Standings</h3>
                 <div class="leaderboard">
                   ${sortedTeams.map((team, idx) => `
-                    <div class="lb-entry ${idx === 0 ? 'leader' : ''}" style="--team-color: ${team.color}">
+                    <div class="lb-entry ${idx === 0 ? 'leader' : ''} ${team.isMarketLeader ? 'market-leader' : ''}" style="--team-color: ${team.color}">
                       <span class="lb-rank">${idx + 1}</span>
                       <span class="lb-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
                       <span class="lb-name">${team.name}</span>
                       <span class="lb-value">${formatCurrency(team.valuation)}</span>
+                      ${team.isMarketLeader ? '<span class="lb-market-leader">🚀</span>' : ''}
                       ${team.wildcardEffect === 'doubled' ? '<span class="lb-wildcard doubled">⚡2x</span>' : ''}
                       ${team.wildcardEffect === 'shielded' ? '<span class="lb-wildcard shielded">🛡️</span>' : ''}
                       ${team.salesSynergyActive ? '<span class="lb-perk sales">🤝+5%</span>' : ''}
@@ -2198,6 +2357,7 @@ function renderWinner(app) {
                 <span class="rank-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
                 <span class="rank-name">${team.name}</span>
                 <span class="rank-value">${formatCurrency(team.valuation)}</span>
+                ${team.marketLeaderCount > 0 ? `<span class="rank-leader">🚀${team.marketLeaderCount}</span>` : ''}
               </div>
             `).join('')}
           </div>
@@ -2215,6 +2375,22 @@ function renderWinner(app) {
               </div>
             `).join('')}
           </div>
+        </div>
+      </div>
+
+      <div class="market-leader-stats">
+        <h3>🚀 Market Leader Awards</h3>
+        <div class="leader-stats-grid">
+          ${sortedTeams
+            .filter(t => t.marketLeaderCount > 0)
+            .sort((a, b) => b.marketLeaderCount - a.marketLeaderCount)
+            .map(team => `
+              <div class="leader-stat-card" style="--team-color: ${team.color}">
+                <span class="leader-stat-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+                <span class="leader-stat-name">${team.name}</span>
+                <span class="leader-stat-count">${team.marketLeaderCount}x</span>
+              </div>
+            `).join('') || '<p class="no-leaders">No market leaders this game</p>'}
         </div>
       </div>
 
