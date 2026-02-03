@@ -295,3 +295,286 @@ const teamDefinitions = [
   { name: "Delta", color: "#96CEB4" },
   { name: "Omega", color: "#FFEAA7" }
 ];
+
+// ==========================================
+// Iteration 3: Company Setup Cards
+// ==========================================
+
+// Market Segment Cards (6 total)
+const segmentCards = [
+  {
+    id: 1,
+    name: "B2B SaaS",
+    description: "Enterprise software solutions for businesses",
+    icon: "🏢"
+  },
+  {
+    id: 2,
+    name: "D2C Consumer",
+    description: "Direct-to-consumer products and brands",
+    icon: "🛒"
+  },
+  {
+    id: 3,
+    name: "Fintech",
+    description: "Financial technology and payments",
+    icon: "💳"
+  },
+  {
+    id: 4,
+    name: "Healthtech",
+    description: "Healthcare technology and wellness",
+    icon: "🏥"
+  },
+  {
+    id: 5,
+    name: "Edtech",
+    description: "Education technology and learning platforms",
+    icon: "📚"
+  },
+  {
+    id: 6,
+    name: "Logistics",
+    description: "Supply chain and delivery solutions",
+    icon: "🚚"
+  }
+];
+
+// Product Cards (8 total)
+const productCards = [
+  {
+    id: 1,
+    type: "product",
+    name: "Analytics Platform",
+    description: "Data insights and business intelligence",
+    icon: "📊"
+  },
+  {
+    id: 2,
+    type: "product",
+    name: "Payment Gateway",
+    description: "Transaction processing infrastructure",
+    icon: "💰"
+  },
+  {
+    id: 3,
+    type: "product",
+    name: "HR Tool",
+    description: "People management and hiring",
+    icon: "👥"
+  },
+  {
+    id: 4,
+    type: "product",
+    name: "CRM System",
+    description: "Customer relationship management",
+    icon: "📇"
+  },
+  {
+    id: 5,
+    type: "product",
+    name: "Security Suite",
+    description: "Cybersecurity and compliance",
+    icon: "🔒"
+  },
+  {
+    id: 6,
+    type: "product",
+    name: "AI Assistant",
+    description: "Intelligent automation and chatbots",
+    icon: "🤖"
+  },
+  {
+    id: 7,
+    type: "product",
+    name: "Marketplace",
+    description: "Multi-sided platform connecting buyers/sellers",
+    icon: "🏪"
+  },
+  {
+    id: 8,
+    type: "product",
+    name: "Mobile App",
+    description: "Consumer-facing mobile application",
+    icon: "📱"
+  }
+];
+
+// Service Cards (8 total)
+const serviceCards = [
+  {
+    id: 1,
+    type: "service",
+    name: "Delivery Service",
+    description: "Last-mile logistics and fulfillment",
+    icon: "📦"
+  },
+  {
+    id: 2,
+    type: "service",
+    name: "Consulting",
+    description: "Expert advisory and implementation",
+    icon: "💼"
+  },
+  {
+    id: 3,
+    type: "service",
+    name: "Managed Services",
+    description: "Outsourced operations and support",
+    icon: "🛠️"
+  },
+  {
+    id: 4,
+    type: "service",
+    name: "Training Platform",
+    description: "Skill development and certification",
+    icon: "🎓"
+  },
+  {
+    id: 5,
+    type: "service",
+    name: "Staffing Agency",
+    description: "Talent acquisition and placement",
+    icon: "🤝"
+  },
+  {
+    id: 6,
+    type: "service",
+    name: "Content Creation",
+    description: "Media production and marketing",
+    icon: "🎬"
+  },
+  {
+    id: 7,
+    type: "service",
+    name: "Subscription Box",
+    description: "Curated recurring deliveries",
+    icon: "📬"
+  },
+  {
+    id: 8,
+    type: "service",
+    name: "On-Demand Service",
+    description: "Gig economy platform",
+    icon: "⚡"
+  }
+];
+
+// Segment + Idea Bonus Combinations
+const setupBonuses = [
+  {
+    segment: "B2B SaaS",
+    idea: "Analytics Platform",
+    bonus: { category: "Engineering", modifier: 0.1 },
+    description: "Tech-driven B2B needs strong engineering"
+  },
+  {
+    segment: "B2B SaaS",
+    idea: "CRM System",
+    bonus: { category: "Sales", modifier: 0.15 },
+    description: "CRM expertise boosts sales effectiveness"
+  },
+  {
+    segment: "B2B SaaS",
+    idea: "Security Suite",
+    bonus: { category: "Engineering", modifier: 0.15 },
+    description: "Security products need top engineers"
+  },
+  {
+    segment: "D2C Consumer",
+    idea: "Mobile App",
+    bonus: { category: "Product", modifier: 0.15 },
+    description: "Consumer apps need product excellence"
+  },
+  {
+    segment: "D2C Consumer",
+    idea: "Subscription Box",
+    bonus: { category: "Ops", modifier: 0.15 },
+    description: "Subscription logistics drive efficiency"
+  },
+  {
+    segment: "D2C Consumer",
+    idea: "Marketplace",
+    bonus: { category: "Sales", modifier: 0.1 },
+    description: "Marketplaces need strong seller acquisition"
+  },
+  {
+    segment: "Fintech",
+    idea: "Payment Gateway",
+    bonus: { category: "Finance", modifier: 0.2 },
+    description: "Payments expertise is critical"
+  },
+  {
+    segment: "Fintech",
+    idea: "Security Suite",
+    bonus: { category: "Engineering", modifier: 0.15 },
+    description: "Fintech security needs top engineers"
+  },
+  {
+    segment: "Fintech",
+    idea: "AI Assistant",
+    bonus: { category: "Engineering", modifier: 0.1 },
+    description: "AI in finance requires tech depth"
+  },
+  {
+    segment: "Healthtech",
+    idea: "AI Assistant",
+    bonus: { category: "Engineering", modifier: 0.15 },
+    description: "Health AI needs technical depth"
+  },
+  {
+    segment: "Healthtech",
+    idea: "Managed Services",
+    bonus: { category: "Ops", modifier: 0.1 },
+    description: "Healthcare ops matter for compliance"
+  },
+  {
+    segment: "Healthtech",
+    idea: "Mobile App",
+    bonus: { category: "Product", modifier: 0.1 },
+    description: "Patient apps need great UX"
+  },
+  {
+    segment: "Edtech",
+    idea: "Training Platform",
+    bonus: { category: "Product", modifier: 0.15 },
+    description: "Learning experience drives engagement"
+  },
+  {
+    segment: "Edtech",
+    idea: "Content Creation",
+    bonus: { category: "Product", modifier: 0.1 },
+    description: "Content quality defines edtech"
+  },
+  {
+    segment: "Edtech",
+    idea: "AI Assistant",
+    bonus: { category: "Engineering", modifier: 0.1 },
+    description: "AI tutors need solid tech"
+  },
+  {
+    segment: "Logistics",
+    idea: "Delivery Service",
+    bonus: { category: "Ops", modifier: 0.2 },
+    description: "Delivery excellence is everything"
+  },
+  {
+    segment: "Logistics",
+    idea: "On-Demand Service",
+    bonus: { category: "Sales", modifier: 0.1 },
+    description: "On-demand needs customer acquisition"
+  },
+  {
+    segment: "Logistics",
+    idea: "Analytics Platform",
+    bonus: { category: "Engineering", modifier: 0.1 },
+    description: "Route optimization needs tech"
+  }
+];
+
+// Helper to find bonus for a segment + idea combo
+function getSetupBonus(segmentName, ideaName) {
+  return setupBonuses.find(
+    b => b.segment === segmentName && b.idea === ideaName
+  ) || null;
+}

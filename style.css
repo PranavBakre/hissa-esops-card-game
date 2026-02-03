@@ -1999,6 +1999,596 @@ body {
 }
 
 /* ==================== */
+/* Iteration 3: Company Setup Phase */
+/* ==================== */
+
+.setup-main,
+.setup-lock-main,
+.setup-summary-main {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.setup-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.setup-icon {
+  font-size: 4rem;
+  margin-bottom: 0.5rem;
+}
+
+.setup-header h1 {
+  margin-bottom: 0.5rem;
+}
+
+.setup-header p {
+  color: var(--text-secondary);
+}
+
+.setup-turn-indicator {
+  text-align: center;
+  font-size: 1.25rem;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+}
+
+.turn-team {
+  font-weight: 700;
+  font-size: 1.5rem;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.turn-action {
+  color: var(--text-secondary);
+}
+
+/* Setup Hand Cards */
+.setup-hand {
+  margin-bottom: 2rem;
+}
+
+.setup-hand h3 {
+  text-align: center;
+  margin-bottom: 1rem;
+  color: var(--text-secondary);
+}
+
+.hand-cards {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.setup-card {
+  width: 160px;
+  padding: 1.25rem 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  border: 2px solid var(--border);
+  transition: all 0.2s;
+}
+
+.setup-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow);
+}
+
+.setup-card.segment {
+  border-color: #4ECDC4;
+}
+
+.setup-card.product {
+  border-color: #FFD93D;
+}
+
+.setup-card.service {
+  border-color: #6BCB77;
+}
+
+.setup-card-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.setup-card-name {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.setup-card-type {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+}
+
+.setup-card-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.drop-card-btn {
+  width: 100%;
+  padding: 0.5rem;
+  background: var(--error);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.drop-card-btn:hover {
+  background: #dc2626;
+}
+
+/* Setup Decks */
+.setup-decks {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.setup-decks h3 {
+  margin-bottom: 1rem;
+  color: var(--text-secondary);
+}
+
+.deck-options {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.deck-btn {
+  padding: 1.5rem 2rem;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 140px;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.deck-btn:hover:not(:disabled) {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow);
+}
+
+.deck-btn.segment:hover:not(:disabled) {
+  border-color: #4ECDC4;
+}
+
+.deck-btn.idea:hover:not(:disabled) {
+  border-color: #FFD93D;
+}
+
+.deck-btn.pass:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+.deck-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.deck-icon {
+  font-size: 2rem;
+}
+
+.deck-label {
+  font-weight: 600;
+}
+
+.deck-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Other Teams Status */
+.other-teams-status {
+  text-align: center;
+}
+
+.other-teams-status h4 {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.teams-status-row {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.team-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--team-color);
+}
+
+.team-status-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #000;
+}
+
+.team-status-name {
+  font-weight: 500;
+}
+
+.team-status-cards {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Setup Lock Phase */
+.lock-teams-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.lock-card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  border: 2px solid var(--border);
+}
+
+.lock-card.locked {
+  border-color: var(--success);
+  opacity: 0.9;
+}
+
+.lock-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.lock-card-header .team-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #000;
+}
+
+.lock-card-header .team-name {
+  font-weight: 600;
+  flex: 1;
+}
+
+.locked-badge {
+  background: var(--success);
+  color: #000;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.locked-selections {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+  flex-wrap: wrap;
+}
+
+.locked-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+}
+
+.locked-item.segment {
+  border: 1px solid #4ECDC4;
+}
+
+.locked-item.idea {
+  border: 1px solid #FFD93D;
+}
+
+.locked-item-icon {
+  font-size: 1.25rem;
+}
+
+.locked-x {
+  font-size: 1.25rem;
+  color: var(--text-muted);
+}
+
+.selection-section {
+  margin-bottom: 1rem;
+}
+
+.selection-section h4 {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+.selection-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.selection-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.selection-option:hover {
+  border-color: var(--accent);
+}
+
+.selection-option.selected {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.selection-option input {
+  display: none;
+}
+
+.option-icon {
+  font-size: 1.25rem;
+}
+
+.option-name {
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.option-type {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.no-cards {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 0.5rem;
+}
+
+.bonus-preview,
+.bonus-display {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.has-bonus {
+  color: var(--success);
+}
+
+.bonus-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.no-bonus-preview,
+.no-bonus {
+  color: var(--text-muted);
+}
+
+.lock-btn {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lock-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.lock-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lock-progress {
+  text-align: center;
+}
+
+.lock-progress .progress-text {
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+}
+
+/* Setup Summary */
+.setup-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.setup-summary-card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  border-top: 4px solid var(--team-color);
+}
+
+.setup-summary-card .summary-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.setup-summary-card .team-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #000;
+  flex-shrink: 0;
+}
+
+.setup-summary-card .team-info h3 {
+  font-size: 1.125rem;
+  margin-bottom: 0.25rem;
+}
+
+.setup-summary-card .problem-statement {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.company-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.setup-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+}
+
+.setup-item.segment {
+  border-left: 3px solid #4ECDC4;
+}
+
+.setup-item.idea {
+  border-left: 3px solid #FFD93D;
+}
+
+.setup-item-icon {
+  font-size: 1.5rem;
+}
+
+.setup-item-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.setup-item-name {
+  font-weight: 600;
+}
+
+.setup-item-type {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+.bonus-badge {
+  text-align: center;
+  padding: 0.5rem;
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+}
+
+.no-bonus-badge {
+  text-align: center;
+  padding: 0.5rem;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border-radius: var(--radius-md);
+}
+
+.setup-summary-actions {
+  text-align: center;
+}
+
+/* Sidebar Setup Info */
+.sidebar-setup {
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+}
+
+.sidebar-setup-item {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-bonus {
+  display: block;
+  color: var(--success);
+  font-weight: 600;
+  margin-top: 0.25rem;
+}
+
+/* ==================== */
 /* Iteration 2: Wildcard Phase */
 /* ==================== */
 

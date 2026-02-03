@@ -2,7 +2,7 @@
 
 // Game State
 let gameState = {
-  phase: 'registration', // registration | auction | seed | early | secondary-drop | secondary-hire | mature | exit | winner
+  phase: 'registration', // registration | setup | setup-lock | setup-summary | auction | seed | early | secondary-drop | secondary-hire | mature | exit | winner
   currentCardIndex: 0,
   teams: [],
   employeeDeck: [],
@@ -16,7 +16,14 @@ let gameState = {
   registeredTeams: 0,
   // Iteration 2: Wildcard
   wildcardPhase: false,
-  teamWildcardSelections: {}
+  teamWildcardSelections: {},
+  // Iteration 3: Company Setup
+  setupRound: 0,
+  setupDraftTurn: 0,
+  setupPhase: 'drop', // 'drop' | 'draw'
+  segmentDeck: [],
+  ideaDeck: [],
+  setupDiscard: []
 };
 
 // Initialize game
@@ -34,7 +41,12 @@ function initGame() {
     isDisqualified: false,
     // Iteration 2: Wildcard
     wildcardUsed: false,
-    wildcardActiveThisRound: null // 'double' | 'shield' | null
+    wildcardActiveThisRound: null, // 'double' | 'shield' | null
+    // Iteration 3: Company Setup
+    setupHand: [],
+    lockedSegment: null,
+    lockedIdea: null,
+    setupBonus: null
   }));
 
   // Shuffle and set up employee deck
@@ -56,6 +68,13 @@ function initGame() {
   // Iteration 2: Wildcard
   gameState.wildcardPhase = false;
   gameState.teamWildcardSelections = {};
+  // Iteration 3: Company Setup
+  gameState.setupRound = 0;
+  gameState.setupDraftTurn = 0;
+  gameState.setupPhase = 'drop';
+  gameState.segmentDeck = [];
+  gameState.ideaDeck = [];
+  gameState.setupDiscard = [];
 
   saveState();
   render();
@@ -147,6 +166,204 @@ function startAuction() {
     return;
   }
 
+  // Iteration 3: Go to setup phase instead of auction
+  initSetupPhase();
+}
+
+// Iteration 3: Initialize company setup phase
+function initSetupPhase() {
+  // Shuffle segment and idea decks
+  const shuffledSegments = shuffleArray([...segmentCards]);
+  const shuffledProducts = shuffleArray([...productCards]);
+  const shuffledServices = shuffleArray([...serviceCards]);
+  const shuffledIdeas = shuffleArray([...shuffledProducts, ...shuffledServices]);
+
+  // Deal initial hands to each team (1 segment, 2 products, 2 services ideally)
+  // Since we have 6 segments and 5 teams, deal 1 segment per team
+  // For ideas, deal 4 cards per team (mix of products and services)
+  gameState.teams.forEach((team, idx) => {
+    team.setupHand = [
+      shuffledSegments[idx], // 1 segment card
+      shuffledIdeas[idx * 4],
+      shuffledIdeas[idx * 4 + 1],
+      shuffledIdeas[idx * 4 + 2],
+      shuffledIdeas[idx * 4 + 3]
+    ].filter(Boolean);
+  });
+
+  // Remaining cards go to decks
+  gameState.segmentDeck = shuffledSegments.slice(5);
+  gameState.ideaDeck = shuffledIdeas.slice(20);
+
+  gameState.setupRound = 0;
+  gameState.setupDraftTurn = 0;
+  gameState.setupPhase = 'drop';
+  gameState.setupDiscard = [];
+  gameState.phase = 'setup';
+
+  saveState();
+  render();
+}
+
+// Iteration 3: Drop a card during setup
+function dropSetupCard(teamIndex, cardId, isSegment) {
+  if (teamIndex !== gameState.setupDraftTurn) {
+    showToast("Not your turn!", 'error');
+    return;
+  }
+
+  const team = gameState.teams[teamIndex];
+  const cardIndex = team.setupHand.findIndex(c => {
+    if (isSegment) {
+      return c.id === cardId && !c.type;
+    } else {
+      return c.id === cardId && c.type;
+    }
+  });
+
+  if (cardIndex === -1) {
+    showToast("Card not found!", 'error');
+    return;
+  }
+
+  const [dropped] = team.setupHand.splice(cardIndex, 1);
+  gameState.setupDiscard.push(dropped);
+
+  gameState.setupPhase = 'draw';
+  saveState();
+  render();
+
+  showToast(`${team.name} dropped ${dropped.name}`, 'info');
+}
+
+// Iteration 3: Draw a card during setup
+function drawSetupCard(teamIndex, deckType) {
+  if (teamIndex !== gameState.setupDraftTurn) {
+    showToast("Not your turn!", 'error');
+    return;
+  }
+
+  const team = gameState.teams[teamIndex];
+  let card = null;
+
+  if (deckType === 'segment' && gameState.segmentDeck.length > 0) {
+    card = gameState.segmentDeck.pop();
+  } else if (deckType === 'idea' && gameState.ideaDeck.length > 0) {
+    card = gameState.ideaDeck.pop();
+  }
+
+  if (card) {
+    team.setupHand.push(card);
+    showToast(`${team.name} drew ${card.name}`, 'success');
+  } else {
+    showToast("No cards left in that deck!", 'error');
+    return;
+  }
+
+  // Move to next team
+  gameState.setupDraftTurn++;
+  gameState.setupPhase = 'drop';
+
+  // Check if round complete
+  if (gameState.setupDraftTurn >= 5) {
+    gameState.setupRound++;
+    gameState.setupDraftTurn = 0;
+
+    // Shuffle discard back into decks
+    const discardedSegments = gameState.setupDiscard.filter(c => !c.type);
+    const discardedIdeas = gameState.setupDiscard.filter(c => c.type);
+
+    gameState.segmentDeck = shuffleArray([...gameState.segmentDeck, ...discardedSegments]);
+    gameState.ideaDeck = shuffleArray([...gameState.ideaDeck, ...discardedIdeas]);
+    gameState.setupDiscard = [];
+  }
+
+  // Check if all 3 rounds complete
+  if (gameState.setupRound >= 3) {
+    gameState.phase = 'setup-lock';
+  }
+
+  saveState();
+  render();
+}
+
+// Iteration 3: Skip drawing (pass)
+function skipSetupDraw(teamIndex) {
+  if (teamIndex !== gameState.setupDraftTurn) {
+    showToast("Not your turn!", 'error');
+    return;
+  }
+
+  const team = gameState.teams[teamIndex];
+  showToast(`${team.name} passed on drawing`, 'info');
+
+  // Move to next team
+  gameState.setupDraftTurn++;
+  gameState.setupPhase = 'drop';
+
+  if (gameState.setupDraftTurn >= 5) {
+    gameState.setupRound++;
+    gameState.setupDraftTurn = 0;
+
+    const discardedSegments = gameState.setupDiscard.filter(c => !c.type);
+    const discardedIdeas = gameState.setupDiscard.filter(c => c.type);
+
+    gameState.segmentDeck = shuffleArray([...gameState.segmentDeck, ...discardedSegments]);
+    gameState.ideaDeck = shuffleArray([...gameState.ideaDeck, ...discardedIdeas]);
+    gameState.setupDiscard = [];
+  }
+
+  if (gameState.setupRound >= 3) {
+    gameState.phase = 'setup-lock';
+  }
+
+  saveState();
+  render();
+}
+
+// Iteration 3: Lock setup selections
+function lockSetupCards(teamIndex, segmentId, ideaId) {
+  const team = gameState.teams[teamIndex];
+
+  const segment = team.setupHand.find(c => c.id === segmentId && !c.type);
+  const idea = team.setupHand.find(c => c.id === ideaId && c.type);
+
+  if (!segment) {
+    showToast('Please select a market segment!', 'error');
+    return;
+  }
+
+  if (!idea) {
+    showToast('Please select an idea (product or service)!', 'error');
+    return;
+  }
+
+  team.lockedSegment = segment;
+  team.lockedIdea = idea;
+  team.setupBonus = getSetupBonus(segment.name, idea.name);
+
+  saveState();
+  render();
+
+  if (team.setupBonus) {
+    showToast(`${team.name} locked: ${segment.name} + ${idea.name} (${team.setupBonus.bonus.category} +${team.setupBonus.bonus.modifier})`, 'success');
+  } else {
+    showToast(`${team.name} locked: ${segment.name} + ${idea.name}`, 'success');
+  }
+
+  // Check if all teams locked
+  const allLocked = gameState.teams.every(t => t.lockedSegment && t.lockedIdea);
+  if (allLocked) {
+    setTimeout(() => {
+      gameState.phase = 'setup-summary';
+      saveState();
+      render();
+    }, 500);
+  }
+}
+
+// Iteration 3: Start auction from setup summary
+function startAuctionFromSetup() {
   gameState.phase = 'auction';
   saveState();
   render();
@@ -281,7 +498,14 @@ function applyMarketCard(card) {
     let skillTotal = 0;
 
     team.employees.forEach(emp => {
-      const hardMod = card.hardSkillModifiers[emp.category] || 0;
+      // Base hard skill modifier from market card
+      let hardMod = card.hardSkillModifiers[emp.category] || 0;
+
+      // Iteration 3: Add setup bonus if category matches
+      if (team.setupBonus && team.setupBonus.bonus.category === emp.category) {
+        hardMod += team.setupBonus.bonus.modifier;
+      }
+
       const adjustedHard = Math.min(1, Math.max(0, emp.hardSkill + hardMod));
 
       let softTotal = 0;
@@ -654,6 +878,16 @@ function render() {
     case 'registration':
       renderRegistration(app);
       break;
+    // Iteration 3: Setup phases
+    case 'setup':
+      renderSetupPhase(app);
+      break;
+    case 'setup-lock':
+      renderSetupLock(app);
+      break;
+    case 'setup-summary':
+      renderSetupSummary(app);
+      break;
     case 'auction':
       renderAuction(app);
       break;
@@ -765,6 +999,7 @@ function renderRegistration(app) {
 function renderPhaseBar(activePhase) {
   const phases = [
     { id: 'registration', label: 'Register', icon: '📝' },
+    { id: 'setup', label: 'Setup', icon: '🎴' },
     { id: 'auction', label: 'Auction', icon: '🔨' },
     { id: 'seed', label: 'Seed', icon: '🌱' },
     { id: 'early', label: 'Early', icon: '📈' },
@@ -773,8 +1008,10 @@ function renderPhaseBar(activePhase) {
     { id: 'exit', label: 'Exit', icon: '🚀' }
   ];
 
-  const phaseOrder = ['registration', 'auction', 'seed', 'early', 'secondary', 'mature', 'exit'];
-  const activeIndex = phaseOrder.indexOf(activePhase);
+  const phaseOrder = ['registration', 'setup', 'auction', 'seed', 'early', 'secondary', 'mature', 'exit'];
+  // Map setup-lock and setup-summary to setup for phase bar
+  const normalizedPhase = activePhase.startsWith('setup') ? 'setup' : activePhase;
+  const activeIndex = phaseOrder.indexOf(normalizedPhase);
 
   return `
     <nav class="phase-nav">
@@ -806,6 +1043,15 @@ function renderTeamsSidebar() {
             <span class="sidebar-team-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
             <span class="sidebar-team-name">${team.name}</span>
           </div>
+          ${team.lockedSegment && team.lockedIdea ? `
+            <div class="sidebar-setup">
+              <span class="sidebar-setup-item">${team.lockedSegment.icon} ${team.lockedSegment.name}</span>
+              <span class="sidebar-setup-item">${team.lockedIdea.icon} ${team.lockedIdea.name}</span>
+              ${team.setupBonus ? `
+                <span class="sidebar-bonus">+${team.setupBonus.bonus.modifier} ${team.setupBonus.bonus.category}</span>
+              ` : ''}
+            </div>
+          ` : ''}
           <div class="sidebar-team-stats">
             <div class="sidebar-stat">
               <span class="stat-icon">💰</span>
@@ -1302,6 +1548,325 @@ function renderExit(app) {
             </button>
           </div>
         `}
+      </main>
+    </div>
+  `;
+}
+
+// Iteration 3: Render setup drafting phase
+function renderSetupPhase(app) {
+  const currentTeam = gameState.teams[gameState.setupDraftTurn];
+  const isDropPhase = gameState.setupPhase === 'drop';
+
+  app.innerHTML = `
+    <div class="game-container">
+      ${renderPhaseBar('setup')}
+
+      <main class="setup-main">
+        <div class="setup-header">
+          <div class="setup-icon">🎴</div>
+          <h1>Company Setup</h1>
+          <p>Round ${gameState.setupRound + 1} of 3 - Draft your market segment and idea</p>
+        </div>
+
+        <div class="setup-turn-indicator">
+          <span class="turn-team" style="color: ${currentTeam.color}">
+            ${currentTeam.name}'s Turn
+          </span>
+          <span class="turn-action">
+            ${isDropPhase ? '📤 Drop 1 card' : '📥 Draw 1 card (or pass)'}
+          </span>
+        </div>
+
+        <div class="setup-hand">
+          <h3>Your Hand (${currentTeam.setupHand.length} cards)</h3>
+          <div class="hand-cards">
+            ${currentTeam.setupHand.map(card => {
+              const isSegment = !card.type;
+              const cardType = isSegment ? 'segment' : card.type;
+              return `
+                <div class="setup-card ${cardType}">
+                  <div class="setup-card-icon">${card.icon}</div>
+                  <div class="setup-card-name">${card.name}</div>
+                  <div class="setup-card-type">${isSegment ? 'SEGMENT' : card.type.toUpperCase()}</div>
+                  <div class="setup-card-desc">${card.description}</div>
+                  ${isDropPhase ? `
+                    <button class="drop-card-btn" onclick="dropSetupCard(${gameState.setupDraftTurn}, ${card.id}, ${isSegment})">
+                      Drop
+                    </button>
+                  ` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        ${!isDropPhase ? `
+          <div class="setup-decks">
+            <h3>Draw From</h3>
+            <div class="deck-options">
+              <button class="deck-btn segment"
+                      onclick="drawSetupCard(${gameState.setupDraftTurn}, 'segment')"
+                      ${gameState.segmentDeck.length === 0 ? 'disabled' : ''}>
+                <span class="deck-icon">🏢</span>
+                <span class="deck-label">Segments</span>
+                <span class="deck-count">${gameState.segmentDeck.length} left</span>
+              </button>
+              <button class="deck-btn idea"
+                      onclick="drawSetupCard(${gameState.setupDraftTurn}, 'idea')"
+                      ${gameState.ideaDeck.length === 0 ? 'disabled' : ''}>
+                <span class="deck-icon">💡</span>
+                <span class="deck-label">Ideas</span>
+                <span class="deck-count">${gameState.ideaDeck.length} left</span>
+              </button>
+              <button class="deck-btn pass" onclick="skipSetupDraw(${gameState.setupDraftTurn})">
+                <span class="deck-icon">⏭️</span>
+                <span class="deck-label">Pass</span>
+                <span class="deck-count">Skip drawing</span>
+              </button>
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="other-teams-status">
+          <h4>Other Teams</h4>
+          <div class="teams-status-row">
+            ${gameState.teams.map((team, idx) => {
+              if (idx === gameState.setupDraftTurn) return '';
+              const segments = team.setupHand.filter(c => !c.type).length;
+              const ideas = team.setupHand.filter(c => c.type).length;
+              return `
+                <div class="team-status-badge" style="--team-color: ${team.color}">
+                  <span class="team-status-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+                  <span class="team-status-name">${team.name}</span>
+                  <span class="team-status-cards">${segments}S / ${ideas}I</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </main>
+    </div>
+  `;
+}
+
+// Iteration 3: Render setup lock phase
+function renderSetupLock(app) {
+  const lockedCount = gameState.teams.filter(t => t.lockedSegment && t.lockedIdea).length;
+
+  app.innerHTML = `
+    <div class="game-container">
+      ${renderPhaseBar('setup')}
+
+      <main class="setup-lock-main">
+        <div class="setup-header">
+          <div class="setup-icon">🔒</div>
+          <h1>Lock Your Company Setup</h1>
+          <p>Each team: Select 1 Segment + 1 Idea (Product or Service)</p>
+        </div>
+
+        <div class="lock-teams-grid">
+          ${gameState.teams.map((team, idx) => {
+            const isLocked = team.lockedSegment && team.lockedIdea;
+            const segments = team.setupHand.filter(c => !c.type);
+            const ideas = team.setupHand.filter(c => c.type);
+
+            return `
+              <div class="lock-card ${isLocked ? 'locked' : ''}" style="--team-color: ${team.color}">
+                <div class="lock-card-header">
+                  <span class="team-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+                  <span class="team-name">${team.name}</span>
+                  ${isLocked ? '<span class="locked-badge">✓ Locked</span>' : ''}
+                </div>
+
+                ${isLocked ? `
+                  <div class="locked-selections">
+                    <div class="locked-item segment">
+                      <span class="locked-item-icon">${team.lockedSegment.icon}</span>
+                      <span>${team.lockedSegment.name}</span>
+                    </div>
+                    <span class="locked-x">×</span>
+                    <div class="locked-item idea">
+                      <span class="locked-item-icon">${team.lockedIdea.icon}</span>
+                      <span>${team.lockedIdea.name}</span>
+                    </div>
+                  </div>
+                  ${team.setupBonus ? `
+                    <div class="bonus-display">
+                      🎯 ${team.setupBonus.bonus.category} +${team.setupBonus.bonus.modifier}
+                      <p class="bonus-desc">${team.setupBonus.description}</p>
+                    </div>
+                  ` : `
+                    <div class="no-bonus">No combo bonus</div>
+                  `}
+                ` : `
+                  <div class="selection-section">
+                    <h4>Select Segment</h4>
+                    <div class="selection-options" id="segments-${idx}">
+                      ${segments.map((s, i) => `
+                        <label class="selection-option ${i === 0 ? 'selected' : ''}">
+                          <input type="radio" name="segment-${idx}" value="${s.id}" ${i === 0 ? 'checked' : ''}
+                                 onchange="updateSetupPreview(${idx})">
+                          <span class="option-icon">${s.icon}</span>
+                          <span class="option-name">${s.name}</span>
+                        </label>
+                      `).join('')}
+                      ${segments.length === 0 ? '<div class="no-cards">No segments!</div>' : ''}
+                    </div>
+                  </div>
+
+                  <div class="selection-section">
+                    <h4>Select Idea</h4>
+                    <div class="selection-options" id="ideas-${idx}">
+                      ${ideas.map((i, index) => `
+                        <label class="selection-option ${index === 0 ? 'selected' : ''}">
+                          <input type="radio" name="idea-${idx}" value="${i.id}" ${index === 0 ? 'checked' : ''}
+                                 onchange="updateSetupPreview(${idx})">
+                          <span class="option-icon">${i.icon}</span>
+                          <span class="option-name">${i.name}</span>
+                          <span class="option-type">${i.type}</span>
+                        </label>
+                      `).join('')}
+                      ${ideas.length === 0 ? '<div class="no-cards">No ideas!</div>' : ''}
+                    </div>
+                  </div>
+
+                  <div class="bonus-preview" id="preview-${idx}">
+                    ${getPreviewBonus(segments[0], ideas[0])}
+                  </div>
+
+                  <button class="lock-btn"
+                          onclick="lockFromUI(${idx})"
+                          ${segments.length === 0 || ideas.length === 0 ? 'disabled' : ''}>
+                    Lock Selections
+                  </button>
+                `}
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div class="lock-progress">
+          <div class="progress-text">Teams Locked: ${lockedCount}/5</div>
+        </div>
+      </main>
+    </div>
+  `;
+}
+
+// Iteration 3: Helper to get preview bonus HTML
+function getPreviewBonus(segment, idea) {
+  if (!segment || !idea) return '<div class="no-bonus-preview">Select both to see bonus</div>';
+  const bonus = getSetupBonus(segment.name, idea.name);
+  if (bonus) {
+    return `
+      <div class="has-bonus">
+        🎯 Bonus: ${bonus.bonus.category} +${bonus.bonus.modifier}
+        <p class="bonus-desc">${bonus.description}</p>
+      </div>
+    `;
+  }
+  return '<div class="no-bonus-preview">No combo bonus for this selection</div>';
+}
+
+// Iteration 3: Update preview when selection changes
+function updateSetupPreview(teamIndex) {
+  const team = gameState.teams[teamIndex];
+  const segments = team.setupHand.filter(c => !c.type);
+  const ideas = team.setupHand.filter(c => c.type);
+
+  const segmentRadio = document.querySelector(`input[name="segment-${teamIndex}"]:checked`);
+  const ideaRadio = document.querySelector(`input[name="idea-${teamIndex}"]:checked`);
+
+  const selectedSegment = segmentRadio ? segments.find(s => s.id === parseInt(segmentRadio.value)) : null;
+  const selectedIdea = ideaRadio ? ideas.find(i => i.id === parseInt(ideaRadio.value)) : null;
+
+  const previewEl = document.getElementById(`preview-${teamIndex}`);
+  if (previewEl) {
+    previewEl.innerHTML = getPreviewBonus(selectedSegment, selectedIdea);
+  }
+
+  // Update selected class on options
+  document.querySelectorAll(`#segments-${teamIndex} .selection-option`).forEach(opt => {
+    const radio = opt.querySelector('input');
+    opt.classList.toggle('selected', radio.checked);
+  });
+  document.querySelectorAll(`#ideas-${teamIndex} .selection-option`).forEach(opt => {
+    const radio = opt.querySelector('input');
+    opt.classList.toggle('selected', radio.checked);
+  });
+}
+
+// Iteration 3: Lock from UI
+function lockFromUI(teamIndex) {
+  const segmentRadio = document.querySelector(`input[name="segment-${teamIndex}"]:checked`);
+  const ideaRadio = document.querySelector(`input[name="idea-${teamIndex}"]:checked`);
+
+  if (!segmentRadio || !ideaRadio) {
+    showToast('Please select both a segment and an idea!', 'error');
+    return;
+  }
+
+  lockSetupCards(teamIndex, parseInt(segmentRadio.value), parseInt(ideaRadio.value));
+}
+
+// Iteration 3: Render setup summary
+function renderSetupSummary(app) {
+  app.innerHTML = `
+    <div class="game-container">
+      ${renderPhaseBar('setup')}
+
+      <main class="setup-summary-main">
+        <div class="setup-header">
+          <div class="setup-icon">✅</div>
+          <h1>Company Setup Complete</h1>
+          <p>All teams have defined their market focus</p>
+        </div>
+
+        <div class="setup-summary-grid">
+          ${gameState.teams.map(team => `
+            <div class="setup-summary-card" style="--team-color: ${team.color}">
+              <div class="summary-card-header">
+                <span class="team-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+                <div class="team-info">
+                  <h3>${team.name}</h3>
+                  <p class="problem-statement">${team.problemStatement}</p>
+                </div>
+              </div>
+
+              <div class="company-setup">
+                <div class="setup-item segment">
+                  <span class="setup-item-icon">${team.lockedSegment.icon}</span>
+                  <div class="setup-item-info">
+                    <span class="setup-item-name">${team.lockedSegment.name}</span>
+                    <span class="setup-item-type">Market Segment</span>
+                  </div>
+                </div>
+                <div class="setup-item idea">
+                  <span class="setup-item-icon">${team.lockedIdea.icon}</span>
+                  <div class="setup-item-info">
+                    <span class="setup-item-name">${team.lockedIdea.name}</span>
+                    <span class="setup-item-type">${team.lockedIdea.type}</span>
+                  </div>
+                </div>
+              </div>
+
+              ${team.setupBonus ? `
+                <div class="bonus-badge">
+                  🎯 ${team.setupBonus.bonus.category} +${team.setupBonus.bonus.modifier}
+                </div>
+              ` : `
+                <div class="no-bonus-badge">No combo bonus</div>
+              `}
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="setup-summary-actions">
+          <button class="action-btn primary large" onclick="startAuctionFromSetup()">
+            Start Talent Auction
+          </button>
+        </div>
       </main>
     </div>
   `;
