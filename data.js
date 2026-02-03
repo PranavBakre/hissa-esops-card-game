@@ -1,6 +1,61 @@
 // ESOP Wars - Game Data
 
+// ==========================================
+// Iteration 4: Category Perks
+// ==========================================
+const categoryPerks = {
+  Engineering: {
+    name: "Ship Fast",
+    description: "Extra valuation boost during Rapid Scaling",
+    icon: "🚀",
+    effect: "engineering_scaling"
+  },
+  Product: {
+    name: "User Focus",
+    description: "50% reduction in soft skill penalties",
+    icon: "🎯",
+    effect: "soft_skill_shield"
+  },
+  Sales: {
+    name: "Deal Closer",
+    description: "+5% valuation with 2+ Sales employees",
+    icon: "🤝",
+    effect: "sales_synergy"
+  },
+  Ops: {
+    name: "Efficiency",
+    description: "10% ESOP discount after first Ops hire",
+    icon: "⚡",
+    effect: "esop_discount"
+  },
+  Finance: {
+    name: "Cost Control",
+    description: "25% loss reduction during Market Crash",
+    icon: "🛡️",
+    effect: "crash_shield"
+  }
+};
+
+// ==========================================
+// Iteration 4: Expanded Soft Skill Pool (10 total)
+// ==========================================
+const softSkillPool = [
+  // Original 5
+  { name: "Resilience", icon: "💪", description: "Handles setbacks gracefully" },
+  { name: "Communication", icon: "💬", description: "Clear and effective messaging" },
+  { name: "Pressure Handling", icon: "⏱️", description: "Performs under stress" },
+  { name: "Leadership", icon: "👑", description: "Inspires and guides teams" },
+  { name: "Adaptability", icon: "🔄", description: "Adjusts to change quickly" },
+  // New 5
+  { name: "Problem Solving", icon: "🧩", description: "Creative solution finder" },
+  { name: "Collaboration", icon: "🤝", description: "Works well with others" },
+  { name: "Initiative", icon: "🎯", description: "Self-starter who takes action" },
+  { name: "Emotional Intelligence", icon: "❤️", description: "Understands team dynamics" },
+  { name: "Strategic Thinking", icon: "🧠", description: "Sees the big picture" }
+];
+
 // Employee Cards (18 total for main auction + 3 reserve for secondary)
+// Iteration 4: Updated with expanded soft skills (2-3 per employee)
 const employeeCards = [
   // Engineering (4 cards)
   {
@@ -9,7 +64,7 @@ const employeeCards = [
     role: "Backend Engineer",
     category: "Engineering",
     hardSkill: 0.7,
-    softSkills: { Resilience: 0.6, Communication: 0.4 }
+    softSkills: { Resilience: 0.6, "Problem Solving": 0.8 }
   },
   {
     id: 2,
@@ -17,7 +72,7 @@ const employeeCards = [
     role: "Frontend Developer",
     category: "Engineering",
     hardSkill: 0.6,
-    softSkills: { Adaptability: 0.7, "Pressure Handling": 0.5 }
+    softSkills: { Adaptability: 0.7, Collaboration: 0.6 }
   },
   {
     id: 3,
@@ -25,7 +80,7 @@ const employeeCards = [
     role: "DevOps Engineer",
     category: "Engineering",
     hardSkill: 0.8,
-    softSkills: { "Pressure Handling": 0.8 }
+    softSkills: { "Pressure Handling": 0.8, Initiative: 0.6 }
   },
   {
     id: 4,
@@ -33,7 +88,7 @@ const employeeCards = [
     role: "Data Engineer",
     category: "Engineering",
     hardSkill: 0.65,
-    softSkills: { Resilience: 0.5, Leadership: 0.4 }
+    softSkills: { "Strategic Thinking": 0.5, "Problem Solving": 0.7 }
   },
 
   // Product (4 cards)
@@ -43,7 +98,7 @@ const employeeCards = [
     role: "Product Manager",
     category: "Product",
     hardSkill: 0.75,
-    softSkills: { Communication: 0.8, Leadership: 0.6 }
+    softSkills: { Communication: 0.8, Leadership: 0.6, "Strategic Thinking": 0.7 }
   },
   {
     id: 6,
@@ -51,7 +106,7 @@ const employeeCards = [
     role: "UX Designer",
     category: "Product",
     hardSkill: 0.6,
-    softSkills: { Adaptability: 0.7, Communication: 0.6 }
+    softSkills: { Adaptability: 0.7, "Emotional Intelligence": 0.65 }
   },
   {
     id: 7,
@@ -59,7 +114,7 @@ const employeeCards = [
     role: "Product Analyst",
     category: "Product",
     hardSkill: 0.55,
-    softSkills: { "Pressure Handling": 0.5, Resilience: 0.6 }
+    softSkills: { "Problem Solving": 0.7, Collaboration: 0.6 }
   },
   {
     id: 8,
@@ -67,7 +122,7 @@ const employeeCards = [
     role: "Growth PM",
     category: "Product",
     hardSkill: 0.7,
-    softSkills: { Leadership: 0.5 }
+    softSkills: { Initiative: 0.8, "Strategic Thinking": 0.6 }
   },
 
   // Sales (4 cards)
@@ -77,7 +132,7 @@ const employeeCards = [
     role: "Sales Lead",
     category: "Sales",
     hardSkill: 0.8,
-    softSkills: { Communication: 0.9, "Pressure Handling": 0.7 }
+    softSkills: { Communication: 0.9, "Emotional Intelligence": 0.8 }
   },
   {
     id: 10,
@@ -85,7 +140,7 @@ const employeeCards = [
     role: "Account Executive",
     category: "Sales",
     hardSkill: 0.6,
-    softSkills: { Resilience: 0.8, Adaptability: 0.5 }
+    softSkills: { Resilience: 0.8, Initiative: 0.7 }
   },
   {
     id: 11,
@@ -93,7 +148,7 @@ const employeeCards = [
     role: "Business Development",
     category: "Sales",
     hardSkill: 0.65,
-    softSkills: { Communication: 0.7, Leadership: 0.4 }
+    softSkills: { Communication: 0.7, Collaboration: 0.65 }
   },
   {
     id: 12,
@@ -101,63 +156,64 @@ const employeeCards = [
     role: "Enterprise Sales",
     category: "Sales",
     hardSkill: 0.75,
-    softSkills: { "Pressure Handling": 0.6 }
+    softSkills: { "Pressure Handling": 0.6, "Strategic Thinking": 0.7 }
   },
 
-  // Ops (3 cards)
+  // Ops (3 cards) - Iteration 4: Boosted hard skills
   {
     id: 13,
     name: "Divya Menon",
     role: "Operations Manager",
     category: "Ops",
     hardSkill: 0.7,
-    softSkills: { Resilience: 0.7, Adaptability: 0.6 }
+    softSkills: { Resilience: 0.7, Adaptability: 0.6, Collaboration: 0.65 }
   },
   {
     id: 14,
     name: "Amit Kumar",
     role: "Supply Chain Lead",
     category: "Ops",
-    hardSkill: 0.6,
-    softSkills: { "Pressure Handling": 0.8, Communication: 0.5 }
+    hardSkill: 0.65,
+    softSkills: { "Pressure Handling": 0.8, "Problem Solving": 0.7 }
   },
   {
     id: 15,
     name: "Pooja Desai",
     role: "Customer Success",
     category: "Ops",
-    hardSkill: 0.55,
-    softSkills: { Communication: 0.8, Resilience: 0.6 }
+    hardSkill: 0.6,
+    softSkills: { Communication: 0.8, "Emotional Intelligence": 0.75 }
   },
 
-  // Finance (3 cards)
+  // Finance (3 cards) - Iteration 4: Boosted hard skills
   {
     id: 16,
     name: "Sanjay Kapoor",
     role: "Finance Manager",
     category: "Finance",
     hardSkill: 0.75,
-    softSkills: { "Pressure Handling": 0.7, Leadership: 0.5 }
+    softSkills: { "Pressure Handling": 0.7, "Strategic Thinking": 0.8 }
   },
   {
     id: 17,
     name: "Ritu Agarwal",
     role: "Financial Analyst",
     category: "Finance",
-    hardSkill: 0.65,
-    softSkills: { Adaptability: 0.5, Resilience: 0.6 }
+    hardSkill: 0.7,
+    softSkills: { "Problem Solving": 0.6, Adaptability: 0.5 }
   },
   {
     id: 18,
     name: "Varun Bhatia",
     role: "Accounts Lead",
     category: "Finance",
-    hardSkill: 0.5,
-    softSkills: { Communication: 0.6, "Pressure Handling": 0.5 }
+    hardSkill: 0.55,
+    softSkills: { Communication: 0.6, Collaboration: 0.7 }
   }
 ];
 
 // Reserve employees for secondary auction (3 cards)
+// Iteration 4: Updated with expanded soft skills
 const reserveEmployees = [
   {
     id: 19,
@@ -165,7 +221,7 @@ const reserveEmployees = [
     role: "Full Stack Developer",
     category: "Engineering",
     hardSkill: 0.85,
-    softSkills: { Adaptability: 0.8, "Pressure Handling": 0.7 }
+    softSkills: { Adaptability: 0.8, "Problem Solving": 0.85, Initiative: 0.7 }
   },
   {
     id: 20,
@@ -173,7 +229,7 @@ const reserveEmployees = [
     role: "Head of Sales",
     category: "Sales",
     hardSkill: 0.9,
-    softSkills: { Leadership: 0.8, Communication: 0.9 }
+    softSkills: { Leadership: 0.8, Communication: 0.9, "Emotional Intelligence": 0.75 }
   },
   {
     id: 21,
@@ -181,11 +237,11 @@ const reserveEmployees = [
     role: "Strategy Lead",
     category: "Product",
     hardSkill: 0.8,
-    softSkills: { Leadership: 0.7, Resilience: 0.6 }
+    softSkills: { Leadership: 0.7, "Strategic Thinking": 0.9, Collaboration: 0.65 }
   }
 ];
 
-// Market Condition Cards (4 cards)
+// Market Condition Cards (6 cards) - Iteration 4: Updated with all 10 soft skills + 2 new conditions
 const marketCards = [
   {
     id: 1,
@@ -203,7 +259,12 @@ const marketCards = [
       Communication: 0,
       "Pressure Handling": 0.2,
       Leadership: 0,
-      Adaptability: 0.1
+      Adaptability: 0.1,
+      "Problem Solving": 0.2,
+      Collaboration: 0,
+      Initiative: 0.15,
+      "Emotional Intelligence": -0.1,
+      "Strategic Thinking": 0.1
     }
   },
   {
@@ -222,7 +283,12 @@ const marketCards = [
       Communication: 0.3,
       "Pressure Handling": 0.1,
       Leadership: 0.2,
-      Adaptability: 0
+      Adaptability: 0,
+      "Problem Solving": 0,
+      Collaboration: 0.2,
+      Initiative: 0.1,
+      "Emotional Intelligence": 0.25,
+      "Strategic Thinking": 0.15
     }
   },
   {
@@ -241,7 +307,12 @@ const marketCards = [
       Communication: 0,
       "Pressure Handling": 0.3,
       Leadership: 0.1,
-      Adaptability: 0.2
+      Adaptability: 0.2,
+      "Problem Solving": 0.2,
+      Collaboration: 0.15,
+      Initiative: -0.1,
+      "Emotional Intelligence": 0.1,
+      "Strategic Thinking": 0.2
     }
   },
   {
@@ -260,24 +331,78 @@ const marketCards = [
       Communication: 0.1,
       "Pressure Handling": 0.1,
       Leadership: 0.15,
-      Adaptability: 0.15
+      Adaptability: 0.15,
+      "Problem Solving": 0.1,
+      Collaboration: 0.2,
+      Initiative: 0.2,
+      "Emotional Intelligence": 0.05,
+      "Strategic Thinking": 0.1
+    }
+  },
+  // Iteration 4: New market conditions
+  {
+    id: 5,
+    name: "Talent War",
+    description: "Everyone's hiring. Soft skills command premiums.",
+    hardSkillModifiers: {
+      Engineering: 0,
+      Product: 0.1,
+      Sales: 0,
+      Ops: -0.1,
+      Finance: 0
+    },
+    softSkillModifiers: {
+      Resilience: 0.15,
+      Communication: 0.2,
+      "Pressure Handling": 0,
+      Leadership: 0.3,
+      Adaptability: 0.2,
+      "Problem Solving": 0.1,
+      Collaboration: 0.25,
+      Initiative: 0.2,
+      "Emotional Intelligence": 0.3,
+      "Strategic Thinking": 0.15
+    }
+  },
+  {
+    id: 6,
+    name: "Regulatory Crackdown",
+    description: "Compliance is king. Finance and ops become critical.",
+    hardSkillModifiers: {
+      Engineering: -0.1,
+      Product: -0.1,
+      Sales: -0.2,
+      Ops: 0.25,
+      Finance: 0.3
+    },
+    softSkillModifiers: {
+      Resilience: 0.1,
+      Communication: 0.15,
+      "Pressure Handling": 0.2,
+      Leadership: 0.1,
+      Adaptability: 0.1,
+      "Problem Solving": 0.15,
+      Collaboration: 0.1,
+      Initiative: -0.1,
+      "Emotional Intelligence": 0,
+      "Strategic Thinking": 0.2
     }
   }
 ];
 
-// Exit Cards (3 types)
+// Exit Cards (3 types) - Iteration 4: Rebalanced multipliers
 const exitCards = [
   {
     id: 1,
     name: "IPO",
-    multiplier: 2.5,
-    description: "You ring the bell! Public markets reward your journey with maximum returns."
+    multiplier: 2.2,
+    description: "You ring the bell! Public markets reward your journey with great returns."
   },
   {
     id: 2,
     name: "M&A",
-    multiplier: 2.0,
-    description: "Acquired by a tech giant. Solid exit with great synergies."
+    multiplier: 1.8,
+    description: "Acquired by a tech giant. Solid exit with strong synergies."
   },
   {
     id: 3,

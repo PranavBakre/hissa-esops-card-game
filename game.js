@@ -29,13 +29,14 @@ let gameState = {
 // Initialize game
 function initGame() {
   // Initialize teams with registration state
+  // Iteration 4: Balance - 12% ESOP pool, ₹20M starting valuation
   gameState.teams = teamDefinitions.map((def) => ({
     name: def.name,
     color: def.color,
     problemStatement: '',
     isRegistered: false,
-    esopRemaining: 10,
-    valuation: 25000000,
+    esopRemaining: 12, // Iteration 4: Increased from 10% to 12%
+    valuation: 20000000, // Iteration 4: Reduced from ₹25M to ₹20M
     employees: [],
     isComplete: false,
     isDisqualified: false,
@@ -377,6 +378,19 @@ function getCurrentCard() {
   return null;
 }
 
+// Iteration 4: Calculate Ops discount for a team
+function getOpsDiscount(team) {
+  // 10% ESOP discount after first Ops hire
+  const hasOps = team.employees.some(emp => emp.category === 'Ops');
+  return hasOps ? 0.1 : 0; // 10% discount
+}
+
+// Iteration 4: Calculate effective ESOP cost with Ops discount
+function getEffectiveEsopCost(team, bidAmount) {
+  const discount = getOpsDiscount(team);
+  return Math.round(bidAmount * (1 - discount) * 100) / 100;
+}
+
 // Place a bid
 function placeBid(teamIndex, amount) {
   const team = gameState.teams[teamIndex];
@@ -412,19 +426,29 @@ function closeBidding() {
 
   const winningTeam = gameState.teams[gameState.currentBid.teamIndex];
   const employee = getCurrentCard();
+  const bidAmount = gameState.currentBid.amount;
+
+  // Iteration 4: Apply Ops ESOP discount
+  const effectiveCost = getEffectiveEsopCost(winningTeam, bidAmount);
+  const hadDiscount = effectiveCost < bidAmount;
 
   winningTeam.employees.push({
     ...employee,
-    bidAmount: gameState.currentBid.amount
+    bidAmount: bidAmount, // Record original bid
+    effectiveCost: effectiveCost // Record actual cost paid
   });
-  winningTeam.esopRemaining -= gameState.currentBid.amount;
+  winningTeam.esopRemaining -= effectiveCost;
   winningTeam.esopRemaining = Math.round(winningTeam.esopRemaining * 100) / 100;
 
   if (winningTeam.employees.length >= 3) {
     winningTeam.isComplete = true;
   }
 
-  showToast(`${winningTeam.name} wins ${employee.name}!`, 'success');
+  if (hadDiscount) {
+    showToast(`${winningTeam.name} wins ${employee.name}! (Ops discount: ${bidAmount}% → ${effectiveCost}%)`, 'success');
+  } else {
+    showToast(`${winningTeam.name} wins ${employee.name}!`, 'success');
+  }
   nextCard();
 }
 
@@ -489,6 +513,16 @@ function drawMarketCard() {
   render();
 }
 
+// Iteration 4: Count employees by category for a team
+function countEmployeesByCategory(team, category) {
+  return team.employees.filter(emp => emp.category === category).length;
+}
+
+// Iteration 4: Check if team has category perk active
+function hasCategoryPerk(team, category) {
+  return team.employees.some(emp => emp.category === category);
+}
+
 // Apply market card modifiers
 function applyMarketCard(card) {
   gameState.teams.forEach(team => {
@@ -496,6 +530,18 @@ function applyMarketCard(card) {
 
     const previousValuation = team.valuation;
     let skillTotal = 0;
+
+    // Iteration 4: Check for category perks
+    const hasEngineering = hasCategoryPerk(team, 'Engineering');
+    const hasProduct = hasCategoryPerk(team, 'Product');
+    const hasSales = hasCategoryPerk(team, 'Sales');
+    const hasFinance = hasCategoryPerk(team, 'Finance');
+    const salesCount = countEmployeesByCategory(team, 'Sales');
+
+    // Check if this is Rapid Scaling (for Engineering perk)
+    const isRapidScaling = card.name === 'Rapid Scaling';
+    // Check if this is Market Crash (for Finance perk)
+    const isMarketCrash = card.name === 'Market Crash';
 
     team.employees.forEach(emp => {
       // Base hard skill modifier from market card
@@ -506,19 +552,52 @@ function applyMarketCard(card) {
         hardMod += team.setupBonus.bonus.modifier;
       }
 
+      // Iteration 4: Engineering perk - Extra boost during Rapid Scaling
+      if (isRapidScaling && hasEngineering && emp.category === 'Engineering') {
+        hardMod += 0.15; // Extra 15% boost for Engineering during scaling
+      }
+
       const adjustedHard = Math.min(1, Math.max(0, emp.hardSkill + hardMod));
 
       let softTotal = 0;
       Object.entries(emp.softSkills).forEach(([skill, value]) => {
-        const softMod = card.softSkillModifiers[skill] || 0;
+        let softMod = card.softSkillModifiers[skill] || 0;
+
+        // Iteration 4: Product perk - 50% reduction in soft skill penalties
+        if (hasProduct && softMod < 0) {
+          softMod = softMod * 0.5; // Reduce penalty by 50%
+        }
+
         softTotal += Math.min(1, Math.max(0, value + softMod));
       });
 
       skillTotal += adjustedHard + softTotal;
     });
 
-    let newValuation = Math.round(previousValuation * (1 + skillTotal * 0.1));
+    // Iteration 4: Balance - Cap growth rate between -30% and +50%
+    const growthRate = Math.max(-0.3, Math.min(0.5, skillTotal * 0.08));
+    let newValuation = Math.round(previousValuation * (1 + growthRate));
     let change = newValuation - previousValuation;
+
+    // Iteration 4: Sales perk - +5% valuation with 2+ Sales employees
+    if (salesCount >= 2) {
+      const salesBonus = Math.round(newValuation * 0.05);
+      newValuation += salesBonus;
+      change += salesBonus;
+      team.salesSynergyActive = true;
+    } else {
+      team.salesSynergyActive = false;
+    }
+
+    // Iteration 4: Finance perk - 25% loss reduction during Market Crash
+    if (isMarketCrash && hasFinance && change < 0) {
+      const reducedLoss = Math.round(change * 0.75); // 25% reduction
+      change = reducedLoss;
+      newValuation = previousValuation + change;
+      team.financeShieldActive = true;
+    } else {
+      team.financeShieldActive = false;
+    }
 
     // Iteration 2: Apply wildcard effects
     const wildcardChoice = team.wildcardActiveThisRound;
@@ -688,12 +767,18 @@ function closeSecondaryBidding() {
   const winningTeam = gameState.teams[gameState.currentBid.teamIndex];
   const empIndex = gameState.secondaryPool.findIndex(e => e.id === gameState.selectedSecondaryCard);
   const employee = gameState.secondaryPool[empIndex];
+  const bidAmount = gameState.currentBid.amount;
+
+  // Iteration 4: Apply Ops ESOP discount
+  const effectiveCost = getEffectiveEsopCost(winningTeam, bidAmount);
+  const hadDiscount = effectiveCost < bidAmount;
 
   winningTeam.employees.push({
     ...employee,
-    bidAmount: gameState.currentBid.amount
+    bidAmount: bidAmount,
+    effectiveCost: effectiveCost
   });
-  winningTeam.esopRemaining -= gameState.currentBid.amount;
+  winningTeam.esopRemaining -= effectiveCost;
   winningTeam.esopRemaining = Math.round(winningTeam.esopRemaining * 100) / 100;
   winningTeam.isComplete = true;
 
@@ -703,7 +788,11 @@ function closeSecondaryBidding() {
   gameState.selectedSecondaryCard = null;
   gameState.currentBid = { teamIndex: null, amount: 0 };
 
-  showToast(`${winningTeam.name} wins ${employee.name}!`, 'success');
+  if (hadDiscount) {
+    showToast(`${winningTeam.name} wins ${employee.name}! (Ops discount: ${bidAmount}% → ${effectiveCost}%)`, 'success');
+  } else {
+    showToast(`${winningTeam.name} wins ${employee.name}!`, 'success');
+  }
 
   const allHired = gameState.teams.every(t => t.isDisqualified || t.employees.length === 3);
   if (allHired) {
@@ -791,6 +880,10 @@ function openBidModal(teamIndex) {
   const modal = document.getElementById('bidModal');
   const minBid = gameState.currentBid.amount + 0.5;
 
+  // Iteration 4: Check for Ops discount
+  const discount = getOpsDiscount(team);
+  const hasOpsDiscount = discount > 0;
+
   document.getElementById('bidTeamName').textContent = team.name;
   document.getElementById('bidTeamName').style.color = team.color;
   document.getElementById('currentBidDisplay').textContent =
@@ -798,6 +891,18 @@ function openBidModal(teamIndex) {
       ? `${gameState.currentBid.amount}% (${gameState.teams[gameState.currentBid.teamIndex].name})`
       : 'No bids yet';
   document.getElementById('maxBidDisplay').textContent = `${team.esopRemaining}%`;
+
+  // Iteration 4: Show Ops discount info
+  const discountDisplay = document.getElementById('opsDiscountDisplay');
+  if (discountDisplay) {
+    if (hasOpsDiscount) {
+      discountDisplay.innerHTML = `<span class="ops-discount-badge">⚡ Ops Discount: 10% off ESOP cost</span>`;
+      discountDisplay.style.display = 'block';
+    } else {
+      discountDisplay.style.display = 'none';
+    }
+  }
+
   document.getElementById('bidInput').value = minBid;
   document.getElementById('bidInput').min = minBid;
   document.getElementById('bidInput').max = team.esopRemaining;
@@ -835,6 +940,7 @@ function confirmBid() {
 function viewTeamDetails(teamIndex) {
   const team = gameState.teams[teamIndex];
   const modal = document.getElementById('teamDetailModal');
+  const activePerks = getActivePerks(team);
 
   document.getElementById('teamDetailName').textContent = team.name;
   document.getElementById('teamDetailName').style.color = team.color;
@@ -846,20 +952,51 @@ function viewTeamDetails(teamIndex) {
   if (team.employees.length === 0) {
     employeesList.innerHTML = '<div class="no-employees">No employees hired yet</div>';
   } else {
-    employeesList.innerHTML = team.employees.map(emp => `
-      <div class="detail-employee">
-        <div class="detail-emp-header">
-          <span class="detail-emp-name">${emp.name}</span>
-          <span class="detail-emp-category ${emp.category.toLowerCase()}">${emp.category}</span>
+    // Iteration 4: Show active perks
+    let perksHtml = '';
+    if (activePerks.length > 0) {
+      perksHtml = `
+        <div class="detail-perks">
+          <h5>Active Perks</h5>
+          <div class="detail-perks-list">
+            ${activePerks.map(perk => `
+              <div class="detail-perk ${perk.category.toLowerCase()}">
+                <span class="detail-perk-icon">${perk.icon}</span>
+                <span class="detail-perk-name">${perk.name}</span>
+                <span class="detail-perk-desc">${perk.description}</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
-        <div class="detail-emp-role">${emp.role}</div>
-        <div class="detail-emp-stats">
-          <span>Hard: ${emp.hardSkill.toFixed(1)}</span>
-          ${Object.entries(emp.softSkills).map(([s, v]) => `<span>${s}: ${v.toFixed(1)}</span>`).join('')}
+      `;
+    }
+
+    employeesList.innerHTML = perksHtml + team.employees.map(emp => {
+      const perk = categoryPerks[emp.category];
+      const effectiveCost = emp.effectiveCost || emp.bidAmount;
+      const hadDiscount = effectiveCost < emp.bidAmount;
+
+      return `
+        <div class="detail-employee">
+          <div class="detail-emp-header">
+            <span class="detail-emp-name">${emp.name}</span>
+            <span class="detail-emp-category ${emp.category.toLowerCase()}">${emp.category}</span>
+          </div>
+          <div class="detail-emp-role">${emp.role}</div>
+          <div class="detail-emp-perk">
+            ${perk ? `<span class="emp-perk-badge">${perk.icon} ${perk.name}</span>` : ''}
+          </div>
+          <div class="detail-emp-stats">
+            <span>Hard: ${emp.hardSkill.toFixed(1)}</span>
+            ${Object.entries(emp.softSkills).map(([s, v]) => `<span>${s}: ${v.toFixed(1)}</span>`).join('')}
+          </div>
+          <div class="detail-emp-bid">
+            Hired for ${emp.bidAmount}%
+            ${hadDiscount ? `<span class="discount-note">(paid ${effectiveCost}% with Ops discount)</span>` : ''}
+          </div>
         </div>
-        <div class="detail-emp-bid">Hired for ${emp.bidAmount}%</div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   modal.classList.add('show');
@@ -1030,47 +1167,80 @@ function renderPhaseBar(activePhase) {
   `;
 }
 
+// Iteration 4: Get active category perks for a team
+function getActivePerks(team) {
+  const perks = [];
+  const categories = ['Engineering', 'Product', 'Sales', 'Ops', 'Finance'];
+
+  categories.forEach(cat => {
+    if (team.employees.some(emp => emp.category === cat)) {
+      const perk = categoryPerks[cat];
+      perks.push({
+        category: cat,
+        ...perk
+      });
+    }
+  });
+
+  return perks;
+}
+
 // Render teams sidebar
 function renderTeamsSidebar() {
   return `
     <aside class="teams-sidebar">
       <h3>Teams</h3>
-      ${gameState.teams.map((team, index) => `
-        <div class="sidebar-team ${team.isComplete ? 'complete' : ''} ${team.isDisqualified ? 'disqualified' : ''}"
-             style="--team-color: ${team.color}"
-             onclick="viewTeamDetails(${index})">
-          <div class="sidebar-team-header">
-            <span class="sidebar-team-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
-            <span class="sidebar-team-name">${team.name}</span>
+      ${gameState.teams.map((team, index) => {
+        const activePerks = getActivePerks(team);
+        const salesCount = countEmployeesByCategory(team, 'Sales');
+
+        return `
+          <div class="sidebar-team ${team.isComplete ? 'complete' : ''} ${team.isDisqualified ? 'disqualified' : ''}"
+               style="--team-color: ${team.color}"
+               onclick="viewTeamDetails(${index})">
+            <div class="sidebar-team-header">
+              <span class="sidebar-team-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+              <span class="sidebar-team-name">${team.name}</span>
+            </div>
+            ${team.lockedSegment && team.lockedIdea ? `
+              <div class="sidebar-setup">
+                <span class="sidebar-setup-item">${team.lockedSegment.icon} ${team.lockedSegment.name}</span>
+                <span class="sidebar-setup-item">${team.lockedIdea.icon} ${team.lockedIdea.name}</span>
+                ${team.setupBonus ? `
+                  <span class="sidebar-bonus">+${team.setupBonus.bonus.modifier} ${team.setupBonus.bonus.category}</span>
+                ` : ''}
+              </div>
+            ` : ''}
+            <div class="sidebar-team-stats">
+              <div class="sidebar-stat">
+                <span class="stat-icon">💰</span>
+                <span>${team.esopRemaining.toFixed(1)}%</span>
+              </div>
+              <div class="sidebar-stat">
+                <span class="stat-icon">👥</span>
+                <span>${team.employees.length}/3</span>
+              </div>
+            </div>
+            ${activePerks.length > 0 ? `
+              <div class="sidebar-perks">
+                ${activePerks.map(perk => `
+                  <span class="perk-badge ${perk.category.toLowerCase()}" title="${perk.description}">
+                    ${perk.icon} ${perk.name}
+                    ${perk.category === 'Sales' && salesCount >= 2 ? '<span class="perk-active">★</span>' : ''}
+                  </span>
+                `).join('')}
+              </div>
+            ` : ''}
+            ${team.isComplete ? '<span class="sidebar-badge complete">Complete</span>' : ''}
+            ${team.isDisqualified ? '<span class="sidebar-badge dq">DQ</span>' : ''}
+            ${!team.isDisqualified ? `
+              <div class="sidebar-wildcard ${team.wildcardUsed ? 'used' : 'ready'}">
+                🃏 ${team.wildcardUsed ? 'Used' : 'Ready'}
+              </div>
+            ` : ''}
           </div>
-          ${team.lockedSegment && team.lockedIdea ? `
-            <div class="sidebar-setup">
-              <span class="sidebar-setup-item">${team.lockedSegment.icon} ${team.lockedSegment.name}</span>
-              <span class="sidebar-setup-item">${team.lockedIdea.icon} ${team.lockedIdea.name}</span>
-              ${team.setupBonus ? `
-                <span class="sidebar-bonus">+${team.setupBonus.bonus.modifier} ${team.setupBonus.bonus.category}</span>
-              ` : ''}
-            </div>
-          ` : ''}
-          <div class="sidebar-team-stats">
-            <div class="sidebar-stat">
-              <span class="stat-icon">💰</span>
-              <span>${team.esopRemaining.toFixed(1)}%</span>
-            </div>
-            <div class="sidebar-stat">
-              <span class="stat-icon">👥</span>
-              <span>${team.employees.length}/3</span>
-            </div>
-          </div>
-          ${team.isComplete ? '<span class="sidebar-badge complete">Complete</span>' : ''}
-          ${team.isDisqualified ? '<span class="sidebar-badge dq">DQ</span>' : ''}
-          ${!team.isDisqualified ? `
-            <div class="sidebar-wildcard ${team.wildcardUsed ? 'used' : 'ready'}">
-              🃏 ${team.wildcardUsed ? 'Used' : 'Ready'}
-            </div>
-          ` : ''}
-        </div>
-      `).join('')}
+        `;
+      }).join('')}
     </aside>
   `;
 }
@@ -1104,6 +1274,14 @@ function renderAuction(app) {
               </div>
               <h2 class="card-name">${card.name}</h2>
               <p class="card-role">${card.role}</p>
+
+              ${categoryPerks[card.category] ? `
+                <div class="category-perk-preview">
+                  <span class="perk-icon">${categoryPerks[card.category].icon}</span>
+                  <span class="perk-name">${categoryPerks[card.category].name}</span>
+                  <span class="perk-desc">${categoryPerks[card.category].description}</span>
+                </div>
+              ` : ''}
 
               <div class="card-skills">
                 <div class="skill-item primary">
@@ -1316,6 +1494,8 @@ function renderMarketRound(app) {
                       <span class="lb-value">${formatCurrency(team.valuation)}</span>
                       ${team.wildcardEffect === 'doubled' ? '<span class="lb-wildcard doubled">⚡2x</span>' : ''}
                       ${team.wildcardEffect === 'shielded' ? '<span class="lb-wildcard shielded">🛡️</span>' : ''}
+                      ${team.salesSynergyActive ? '<span class="lb-perk sales">🤝+5%</span>' : ''}
+                      ${team.financeShieldActive ? '<span class="lb-perk finance">🛡️-25%loss</span>' : ''}
                     </div>
                   `).join('')}
                 </div>
