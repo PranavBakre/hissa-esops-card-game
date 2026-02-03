@@ -13,7 +13,10 @@ let gameState = {
   currentBid: { teamIndex: null, amount: 0 },
   exitCard: null,
   secondaryHired: [],
-  registeredTeams: 0
+  registeredTeams: 0,
+  // Iteration 2: Wildcard
+  wildcardPhase: false,
+  teamWildcardSelections: {}
 };
 
 // Initialize game
@@ -28,7 +31,10 @@ function initGame() {
     valuation: 25000000,
     employees: [],
     isComplete: false,
-    isDisqualified: false
+    isDisqualified: false,
+    // Iteration 2: Wildcard
+    wildcardUsed: false,
+    wildcardActiveThisRound: null // 'double' | 'shield' | null
   }));
 
   // Shuffle and set up employee deck
@@ -47,6 +53,9 @@ function initGame() {
   gameState.exitCard = null;
   gameState.secondaryHired = [];
   gameState.registeredTeams = 0;
+  // Iteration 2: Wildcard
+  gameState.wildcardPhase = false;
+  gameState.teamWildcardSelections = {};
 
   saveState();
   render();
@@ -268,6 +277,7 @@ function applyMarketCard(card) {
   gameState.teams.forEach(team => {
     if (team.isDisqualified) return;
 
+    const previousValuation = team.valuation;
     let skillTotal = 0;
 
     team.employees.forEach(emp => {
@@ -283,8 +293,121 @@ function applyMarketCard(card) {
       skillTotal += adjustedHard + softTotal;
     });
 
-    team.valuation = Math.round(team.valuation * (1 + skillTotal * 0.1));
+    let newValuation = Math.round(previousValuation * (1 + skillTotal * 0.1));
+    let change = newValuation - previousValuation;
+
+    // Iteration 2: Apply wildcard effects
+    const wildcardChoice = team.wildcardActiveThisRound;
+    if (wildcardChoice === 'double' && change > 0) {
+      // Double the gains
+      change = change * 2;
+      newValuation = previousValuation + change;
+      team.wildcardEffect = 'doubled';
+    } else if (wildcardChoice === 'shield' && change < 0) {
+      // Block all losses
+      change = 0;
+      newValuation = previousValuation;
+      team.wildcardEffect = 'shielded';
+    } else {
+      team.wildcardEffect = null;
+    }
+
+    team.valuation = newValuation;
+    team.lastChange = change;
+    team.wildcardActiveThisRound = null; // Clear for next round
   });
+}
+
+// Iteration 2: Start wildcard decision phase
+function startWildcardPhase() {
+  gameState.wildcardPhase = true;
+  gameState.teamWildcardSelections = {};
+
+  // Pre-fill teams that can't use wildcard (already used or disqualified)
+  gameState.teams.forEach((team, idx) => {
+    if (team.isDisqualified || team.wildcardUsed) {
+      gameState.teamWildcardSelections[idx] = null;
+    }
+  });
+
+  saveState();
+  render();
+}
+
+// Iteration 2: Team selects wildcard option
+function selectWildcard(teamIndex, choice) {
+  const team = gameState.teams[teamIndex];
+
+  // choice: 'double' | 'shield' | null (pass)
+  if (team.wildcardUsed && choice !== null) {
+    showToast('Wildcard already used!', 'error');
+    return;
+  }
+
+  gameState.teamWildcardSelections[teamIndex] = choice;
+
+  if (choice !== null) {
+    team.wildcardActiveThisRound = choice;
+    team.wildcardUsed = true;
+    showToast(`${team.name} plays ${choice === 'double' ? 'Double Down' : 'Shield'}!`, 'success');
+  }
+
+  saveState();
+  render();
+
+  // Check if all teams have decided
+  if (allWildcardsDecided()) {
+    setTimeout(() => {
+      endWildcardPhase();
+    }, 500);
+  }
+}
+
+// Iteration 2: Check if all teams have decided
+function allWildcardsDecided() {
+  const activeTeamCount = gameState.teams.filter(t => !t.isDisqualified).length;
+  const decidedCount = Object.keys(gameState.teamWildcardSelections).length;
+  return decidedCount >= activeTeamCount;
+}
+
+// Iteration 2: End wildcard phase and draw market card
+function endWildcardPhase() {
+  gameState.wildcardPhase = false;
+  saveState();
+  render();
+}
+
+// Iteration 2: Calculate employee value for a team
+function calculateEmployeeValue(team) {
+  return team.employees.reduce((total, emp) => {
+    const employeeValue = (emp.bidAmount / 100) * team.valuation;
+    return total + employeeValue;
+  }, 0);
+}
+
+// Iteration 2: Get best employer
+function getBestEmployer() {
+  const teamsWithValue = gameState.teams
+    .filter(t => !t.isDisqualified)
+    .map(team => ({
+      ...team,
+      employeeValue: calculateEmployeeValue(team)
+    }))
+    .sort((a, b) => b.employeeValue - a.employeeValue);
+
+  return teamsWithValue[0];
+}
+
+// Iteration 2: Get both winners
+function getWinners() {
+  const bestFounder = getWinner(); // Existing function (highest valuation)
+  const bestEmployer = getBestEmployer();
+
+  return {
+    founder: bestFounder,
+    employer: bestEmployer,
+    sameTeam: bestFounder.name === bestEmployer.name
+  };
 }
 
 // Next round
@@ -540,7 +663,12 @@ function render() {
     case 'seed':
     case 'early':
     case 'mature':
-      renderMarketRound(app);
+      // Iteration 2: Check if we need wildcard phase first
+      if (gameState.wildcardPhase) {
+        renderWildcardPhase(app);
+      } else {
+        renderMarketRound(app);
+      }
       break;
     case 'secondary-drop':
       renderSecondaryDrop(app);
@@ -690,6 +818,11 @@ function renderTeamsSidebar() {
           </div>
           ${team.isComplete ? '<span class="sidebar-badge complete">Complete</span>' : ''}
           ${team.isDisqualified ? '<span class="sidebar-badge dq">DQ</span>' : ''}
+          ${!team.isDisqualified ? `
+            <div class="sidebar-wildcard ${team.wildcardUsed ? 'used' : 'ready'}">
+              🃏 ${team.wildcardUsed ? 'Used' : 'Ready'}
+            </div>
+          ` : ''}
         </div>
       `).join('')}
     </aside>
@@ -884,7 +1017,10 @@ function renderMarketRound(app) {
             <div class="market-draw-section">
               <div class="draw-card-placeholder">
                 <span class="draw-icon">🎴</span>
-                <p>Draw a market condition card to see how the market affects your valuations</p>
+                <p>Before drawing the market card, teams can use their wildcard</p>
+                <button class="action-btn secondary large" onclick="startWildcardPhase()" style="margin-bottom: 12px;">
+                  🃏 Wildcard Decisions
+                </button>
                 <button class="action-btn primary large" onclick="drawMarketCard()">
                   Draw Market Card
                 </button>
@@ -932,6 +1068,8 @@ function renderMarketRound(app) {
                       <span class="lb-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
                       <span class="lb-name">${team.name}</span>
                       <span class="lb-value">${formatCurrency(team.valuation)}</span>
+                      ${team.wildcardEffect === 'doubled' ? '<span class="lb-wildcard doubled">⚡2x</span>' : ''}
+                      ${team.wildcardEffect === 'shielded' ? '<span class="lb-wildcard shielded">🛡️</span>' : ''}
                     </div>
                   `).join('')}
                 </div>
@@ -1169,55 +1307,200 @@ function renderExit(app) {
   `;
 }
 
+// Iteration 2: Render wildcard decision phase
+function renderWildcardPhase(app) {
+  const phaseNames = { seed: 'Seed Round', early: 'Early Scaling', mature: 'Mature Scaling' };
+  const activeTeams = gameState.teams.filter(t => !t.isDisqualified);
+  const decidedCount = Object.keys(gameState.teamWildcardSelections).length;
+
+  app.innerHTML = `
+    <div class="game-container">
+      ${renderPhaseBar(gameState.phase)}
+
+      <main class="wildcard-main">
+        <div class="wildcard-header">
+          <div class="wildcard-icon">🃏</div>
+          <h1>Wildcard Decision</h1>
+          <p>${phaseNames[gameState.phase]} is coming. Use your wildcard now?</p>
+          <p class="wildcard-warning">⚠️ You won't see the market card before deciding!</p>
+        </div>
+
+        <div class="wildcard-grid">
+          ${gameState.teams.map((team, idx) => {
+            if (team.isDisqualified) return '';
+
+            const hasDecided = gameState.teamWildcardSelections.hasOwnProperty(idx);
+            const decision = gameState.teamWildcardSelections[idx];
+            const alreadyUsed = team.wildcardUsed && !hasDecided;
+
+            return `
+              <div class="wildcard-card ${hasDecided ? 'decided' : ''}" style="--team-color: ${team.color}">
+                <div class="wildcard-card-header">
+                  <span class="team-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+                  <span class="team-name">${team.name}</span>
+                </div>
+
+                ${alreadyUsed ? `
+                  <div class="wildcard-used">
+                    <span class="used-icon">🃏</span>
+                    <span>Wildcard Used</span>
+                  </div>
+                ` : hasDecided ? `
+                  <div class="wildcard-decision ${decision}">
+                    ${decision === 'double' ? '⚡ Double Down' :
+                      decision === 'shield' ? '🛡️ Shield' : '➡️ Pass'}
+                  </div>
+                ` : `
+                  <div class="wildcard-options">
+                    <button class="wildcard-btn double" onclick="selectWildcard(${idx}, 'double')">
+                      <span class="btn-icon">⚡</span>
+                      <span class="btn-label">Double Down</span>
+                      <span class="btn-desc">2x gains this round</span>
+                    </button>
+                    <button class="wildcard-btn shield" onclick="selectWildcard(${idx}, 'shield')">
+                      <span class="btn-icon">🛡️</span>
+                      <span class="btn-label">Shield</span>
+                      <span class="btn-desc">Block all losses</span>
+                    </button>
+                    <button class="wildcard-btn pass" onclick="selectWildcard(${idx}, null)">
+                      <span class="btn-icon">➡️</span>
+                      <span class="btn-label">Pass</span>
+                      <span class="btn-desc">Save for later</span>
+                    </button>
+                  </div>
+                `}
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div class="wildcard-progress">
+          <div class="progress-text">Teams decided: ${decidedCount}/${activeTeams.length}</div>
+          ${decidedCount >= activeTeams.length ? `
+            <button class="action-btn primary large" onclick="endWildcardPhase()">
+              Continue to Market Card
+            </button>
+          ` : ''}
+        </div>
+      </main>
+    </div>
+  `;
+}
+
 // Render winner screen
 function renderWinner(app) {
-  const winner = getWinner();
+  const winners = getWinners();
   const sortedTeams = [...gameState.teams]
     .filter(t => !t.isDisqualified)
     .sort((a, b) => b.valuation - a.valuation);
 
+  // Sort by employee value for best employer ranking
+  const sortedByEmployeeValue = [...gameState.teams]
+    .filter(t => !t.isDisqualified)
+    .map(team => ({
+      ...team,
+      employeeValue: calculateEmployeeValue(team)
+    }))
+    .sort((a, b) => b.employeeValue - a.employeeValue);
+
   app.innerHTML = `
-    <div class="winner-container">
-      <div class="winner-celebration">
-        <div class="trophy">🏆</div>
-        <h1 class="winner-title">Winner!</h1>
-        <div class="winner-team" style="color: ${winner.color}">${winner.name}</div>
-        <div class="winner-valuation">${formatCurrency(winner.valuation)}</div>
-        <div class="winner-problem">
-          <strong>Building:</strong> ${winner.problemStatement}
+    <div class="winner-container dual-winners">
+      ${winners.sameTeam ? `
+        <div class="double-winner-banner">
+          🎉 ${winners.founder.name} wins BOTH categories! 🎉
+        </div>
+      ` : ''}
+
+      <div class="winners-display">
+        <!-- Best Founder -->
+        <div class="winner-card founder">
+          <div class="winner-badge-icon">🏢</div>
+          <h2>Best Founder</h2>
+          <p class="winner-subtitle">Highest Company Valuation</p>
+          <div class="trophy">🏆</div>
+          <div class="winner-team-name" style="color: ${winners.founder.color}">
+            ${winners.founder.name}
+          </div>
+          <div class="winner-value">${formatCurrency(winners.founder.valuation)}</div>
+          <div class="winner-detail">
+            <strong>Building:</strong> ${winners.founder.problemStatement}
+          </div>
+        </div>
+
+        <!-- Best Employer -->
+        <div class="winner-card employer">
+          <div class="winner-badge-icon">💼</div>
+          <h2>Best Employer</h2>
+          <p class="winner-subtitle">Most Value to Employees</p>
+          <div class="trophy">🎖️</div>
+          <div class="winner-team-name" style="color: ${winners.employer.color}">
+            ${winners.employer.name}
+          </div>
+          <div class="winner-value">${formatCurrency(winners.employer.employeeValue)}</div>
+          <div class="winner-detail">
+            <strong>ESOP Given:</strong> ${(10 - winners.employer.esopRemaining).toFixed(1)}%
+          </div>
         </div>
       </div>
 
-      <div class="winner-journey">
-        <h3>The Journey</h3>
-        <div class="journey-stats">
-          <div class="journey-stat">
-            <span class="journey-label">Started</span>
-            <span class="journey-value">₹25M</span>
-          </div>
-          <div class="journey-arrow">→</div>
-          <div class="journey-stat">
-            <span class="journey-label">Final</span>
-            <span class="journey-value highlight">${formatCurrency(winner.valuation)}</span>
+      <div class="rankings-section">
+        <div class="ranking-column">
+          <h3>💰 Valuation Ranking</h3>
+          <div class="ranking-list">
+            ${sortedTeams.map((team, idx) => `
+              <div class="rank-entry" style="--team-color: ${team.color}">
+                <span class="rank">${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}</span>
+                <span class="rank-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+                <span class="rank-name">${team.name}</span>
+                <span class="rank-value">${formatCurrency(team.valuation)}</span>
+              </div>
+            `).join('')}
           </div>
         </div>
-        <div class="journey-growth">
-          ${((winner.valuation / 25000000 - 1) * 100).toFixed(0)}% Growth
+
+        <div class="ranking-column">
+          <h3>💼 Employee Value Ranking</h3>
+          <div class="ranking-list">
+            ${sortedByEmployeeValue.map((team, idx) => `
+              <div class="rank-entry" style="--team-color: ${team.color}">
+                <span class="rank">${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}</span>
+                <span class="rank-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+                <span class="rank-name">${team.name}</span>
+                <span class="rank-value">${formatCurrency(team.employeeValue)}</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
       </div>
 
-      <div class="final-rankings">
-        <h3>Final Rankings</h3>
-        ${sortedTeams.map((team, idx) => `
-          <div class="final-rank-entry ${idx === 0 ? 'first' : ''}" style="--team-color: ${team.color}">
-            <span class="final-rank">${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}</span>
-            <div class="final-rank-team">
-              <span class="final-rank-name">${team.name}</span>
-              <span class="final-rank-problem">${team.problemStatement}</span>
-            </div>
-            <span class="final-rank-value">${formatCurrency(team.valuation)}</span>
-          </div>
-        `).join('')}
+      <div class="employee-breakdown">
+        <h3>Employee ESOP Breakdown</h3>
+        <div class="breakdown-grid">
+          ${gameState.teams.filter(t => !t.isDisqualified).map(team => {
+            const employeeValue = calculateEmployeeValue(team);
+            return `
+              <div class="breakdown-card" style="--team-color: ${team.color}">
+                <h4>${team.name}</h4>
+                <div class="breakdown-employees">
+                  ${team.employees.map(emp => {
+                    const value = (emp.bidAmount / 100) * team.valuation;
+                    return `
+                      <div class="emp-value-row">
+                        <span class="emp-name">${emp.name}</span>
+                        <span class="emp-esop">${emp.bidAmount}%</span>
+                        <span class="emp-value">${formatCurrency(value)}</span>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+                <div class="breakdown-total">
+                  <span>Total:</span>
+                  <strong>${formatCurrency(employeeValue)}</strong>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
       </div>
 
       <button class="action-btn primary large" onclick="resetGame()">

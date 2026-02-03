@@ -1999,6 +1999,459 @@ body {
 }
 
 /* ==================== */
+/* Iteration 2: Wildcard Phase */
+/* ==================== */
+
+.wildcard-main {
+  padding: 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.wildcard-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.wildcard-icon {
+  font-size: 4rem;
+  margin-bottom: 0.5rem;
+}
+
+.wildcard-header h1 {
+  margin-bottom: 0.5rem;
+}
+
+.wildcard-header p {
+  color: var(--text-secondary);
+}
+
+.wildcard-warning {
+  color: var(--warning) !important;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.wildcard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.wildcard-card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  border: 2px solid var(--border);
+  transition: all 0.3s;
+}
+
+.wildcard-card.decided {
+  border-color: var(--team-color);
+  opacity: 0.85;
+}
+
+.wildcard-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.wildcard-card-header .team-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #000;
+}
+
+.wildcard-card-header .team-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.wildcard-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.wildcard-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-primary);
+}
+
+.wildcard-btn:hover {
+  transform: translateY(-2px);
+}
+
+.wildcard-btn.double:hover {
+  background: rgba(255, 215, 0, 0.15);
+  border-color: gold;
+}
+
+.wildcard-btn.shield:hover {
+  background: rgba(74, 144, 226, 0.15);
+  border-color: #4a90e2;
+}
+
+.wildcard-btn.pass:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--text-muted);
+}
+
+.wildcard-btn .btn-icon {
+  font-size: 1.5rem;
+}
+
+.wildcard-btn .btn-label {
+  font-weight: 600;
+  margin-top: 0.25rem;
+}
+
+.wildcard-btn .btn-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.wildcard-decision {
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+}
+
+.wildcard-decision.double {
+  background: rgba(255, 215, 0, 0.15);
+  color: gold;
+}
+
+.wildcard-decision.shield {
+  background: rgba(74, 144, 226, 0.15);
+  color: #4a90e2;
+}
+
+.wildcard-used {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wildcard-used .used-icon {
+  font-size: 2rem;
+  opacity: 0.5;
+}
+
+.wildcard-progress {
+  text-align: center;
+}
+
+.wildcard-progress .progress-text {
+  margin-bottom: 1rem;
+  color: var(--text-secondary);
+}
+
+/* Sidebar wildcard indicator */
+.sidebar-wildcard {
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.sidebar-wildcard.ready {
+  background: rgba(255, 215, 0, 0.2);
+  color: gold;
+}
+
+.sidebar-wildcard.used {
+  background: var(--bg-card);
+  color: var(--text-muted);
+}
+
+/* Leaderboard wildcard effects */
+.lb-wildcard {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.lb-wildcard.doubled {
+  background: rgba(255, 215, 0, 0.2);
+  color: gold;
+}
+
+.lb-wildcard.shielded {
+  background: rgba(74, 144, 226, 0.2);
+  color: #4a90e2;
+}
+
+/* ==================== */
+/* Iteration 2: Dual Winner Display */
+/* ==================== */
+
+.winner-container.dual-winners {
+  padding: 2rem;
+  justify-content: flex-start;
+  padding-top: 3rem;
+}
+
+.double-winner-banner {
+  text-align: center;
+  font-size: 1.75rem;
+  font-weight: 700;
+  padding: 1rem 2rem;
+  background: linear-gradient(90deg, gold, #4ECDC4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 2rem;
+}
+
+.winners-display {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  max-width: 900px;
+  margin: 0 auto 2rem;
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .winners-display {
+    grid-template-columns: 1fr;
+  }
+}
+
+.winner-card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-xl);
+  padding: 2rem;
+  text-align: center;
+  border: 3px solid transparent;
+}
+
+.winner-card.founder {
+  border-color: gold;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), var(--bg-secondary));
+}
+
+.winner-card.employer {
+  border-color: #4ECDC4;
+  background: linear-gradient(135deg, rgba(78, 205, 196, 0.1), var(--bg-secondary));
+}
+
+.winner-badge-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.winner-card h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.winner-subtitle {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.winner-card .trophy {
+  font-size: 3.5rem;
+  margin: 0.5rem 0;
+  animation: bounce 1s infinite;
+}
+
+.winner-team-name {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+}
+
+.winner-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--success);
+  margin-bottom: 0.5rem;
+}
+
+.winner-detail {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.rankings-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  max-width: 900px;
+  margin: 0 auto 2rem;
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .rankings-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ranking-column {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+}
+
+.ranking-column h3 {
+  margin-bottom: 1rem;
+  text-align: center;
+  font-size: 1rem;
+}
+
+.ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rank-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--team-color);
+}
+
+.rank-entry .rank {
+  width: 2rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+.rank-entry .rank-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: #000;
+}
+
+.rank-entry .rank-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.rank-entry .rank-value {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* Employee Breakdown */
+.employee-breakdown {
+  max-width: 1100px;
+  margin: 0 auto 2rem;
+  width: 100%;
+}
+
+.employee-breakdown h3 {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.breakdown-card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  border-left: 4px solid var(--team-color);
+}
+
+.breakdown-card h4 {
+  color: var(--team-color);
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+}
+
+.breakdown-employees {
+  margin-bottom: 0.75rem;
+}
+
+.emp-value-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.875rem;
+}
+
+.emp-value-row:last-child {
+  border-bottom: none;
+}
+
+.emp-value-row .emp-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.emp-value-row .emp-esop {
+  color: var(--text-muted);
+  margin: 0 0.5rem;
+  font-size: 0.75rem;
+}
+
+.emp-value-row .emp-value {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.breakdown-total {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 0.75rem;
+  border-top: 2px solid var(--border);
+  font-size: 0.875rem;
+}
+
+.breakdown-total strong {
+  color: var(--success);
+}
+
+/* ==================== */
 /* Toast Notifications */
 /* ==================== */
 
