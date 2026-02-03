@@ -1,5 +1,25 @@
 // ESOP Wars - Game Logic
 
+// ==========================================
+// Iteration 6: Bot Timing Configuration
+// ==========================================
+const BOT_TIMING = {
+  thinkingDelay: 800,    // Time showing "thinking" overlay
+  actionDelay: 600,      // Time between bot actions
+  turnDelay: 500,        // Time before starting bot turn
+  auctionDelay: 700,     // Time between auction bids
+  lockStagger: 400,      // Stagger between bot locks in setup
+  marketPause: 2000,     // Pause after market results for humans
+};
+
+const MARKET_TIMING = {
+  eventRevealDelay: 2000,      // Time to show event card before effects
+  effectsDisplayDelay: 2500,   // Time to show valuation changes
+  wildcardTimeout: 30000,      // Max wait for human wildcard decisions
+  resultsFinalDelay: 1500,     // Time after wildcards before next round
+  spectatorMultiplier: 0.3,    // Faster timing for all-bot games
+};
+
 // Game State
 let gameState = {
   phase: 'registration', // registration | setup | setup-lock | setup-summary | auction | seed | early | secondary-drop | secondary-hire | mature | exit | winner
@@ -25,7 +45,18 @@ let gameState = {
   ideaDeck: [],
   setupDiscard: [],
   // Iteration 5: Market Leader Bonus
-  roundPerformance: []
+  roundPerformance: [],
+  // Iteration 6: Bot Teams
+  botsEnabled: false,
+  botCount: 0,
+  botExecuting: false,
+  fillWithBots: false,
+  spectatorMode: false,
+  botWildcardDecidedThisRound: {},
+  // Wildcard response tracking for human-priority
+  wildcardResponses: {},
+  wildcardPhaseActive: false,
+  currentRoundResults: null
 };
 
 // Initialize game
@@ -55,7 +86,10 @@ function initGame() {
     currentGain: 0,
     isMarketLeader: false,
     marketLeaderCount: 0,
-    valuationBeforeBonus: 0
+    valuationBeforeBonus: 0,
+    // Iteration 6: Bot Teams
+    isBot: false,
+    botDifficulty: 'normal'
   }));
 
   // Shuffle and set up employee deck
@@ -86,6 +120,14 @@ function initGame() {
   gameState.setupDiscard = [];
   // Iteration 5: Market Leader Bonus
   gameState.roundPerformance = [];
+  // Iteration 6: Bot Teams
+  gameState.botsEnabled = false;
+  gameState.botCount = 0;
+  gameState.botExecuting = false;
+  gameState.fillWithBots = false;
+  gameState.wildcardResponses = {};
+  gameState.wildcardPhaseActive = false;
+  gameState.currentRoundResults = null;
 
   saveState();
   render();
@@ -424,7 +466,29 @@ function placeBid(teamIndex, amount) {
   saveState();
   render();
   showToast(`${team.name} bids ${amount}%!`, 'success');
+
+  // Iteration 6: Trigger bot counter-bidding (for both human and bot bids)
+  if (gameState.botsEnabled) {
+    triggerBotCounterBid();
+  }
+
   return true;
+}
+
+// Trigger bots to consider counter-bidding after any bid
+function triggerBotCounterBid() {
+  if (gameState.botExecuting) return;
+
+  // Give bots a moment to "think" then respond
+  gameState.botExecuting = true;
+  setTimeout(() => {
+    gameState.botExecuting = false;
+    if (gameState.phase === 'auction') {
+      executeBotAuctionBidding();
+    } else if (gameState.phase === 'secondary-hire') {
+      executeBotSecondaryBidding();
+    }
+  }, BOT_TIMING.auctionDelay);
 }
 
 // Close bidding and award employee
@@ -468,6 +532,15 @@ function skipCard() {
   nextCard();
 }
 
+// End bidding - automatically awards or skips based on whether there's a bid
+function endBidding() {
+  if (gameState.currentBid.teamIndex !== null) {
+    closeBidding();
+  } else {
+    skipCard();
+  }
+}
+
 // Move to next card
 function nextCard() {
   gameState.currentCardIndex++;
@@ -488,9 +561,14 @@ function allTeamsComplete() {
 
 // End auction phase
 function endAuction() {
+  // Iteration 6: Apply $1M penalty per missing employee instead of disqualification
   gameState.teams.forEach(team => {
-    if (team.employees.length < 3) {
-      team.isDisqualified = true;
+    const missingEmployees = 3 - team.employees.length;
+    if (missingEmployees > 0) {
+      const penalty = missingEmployees * 1000000;
+      team.valuation = Math.max(0, team.valuation - penalty);
+      team.hiringPenalty = (team.hiringPenalty || 0) + penalty;
+      showToast(`${team.name} penalized ${formatCurrency(penalty)} for ${missingEmployees} missing employee(s)`, 'warning');
     }
   });
 
@@ -516,6 +594,9 @@ function drawMarketCard() {
   const card = gameState.marketDeck.pop();
   gameState.usedMarketCards.push(card);
   gameState.currentMarketCard = card;
+
+  // Reset bot wildcard decisions for this round
+  gameState.botWildcardDecidedThisRound = {};
 
   applyMarketCard(card);
 
@@ -770,7 +851,110 @@ function renderRoundPerformance() {
   `;
 }
 
-// Iteration 2: Start wildcard decision phase
+// Iteration 6: Render inline wildcard section (after seeing results)
+function renderWildcardSection() {
+  // Check if any team can still use wildcard
+  const teamsWithWildcard = gameState.teams.filter(t =>
+    !t.isDisqualified && !t.wildcardUsed
+  );
+
+  if (teamsWithWildcard.length === 0) {
+    return '<div class="wildcard-section used"><p>All wildcards have been used</p></div>';
+  }
+
+  return `
+    <div class="wildcard-section">
+      <h3>🃏 Wildcard Decisions</h3>
+      <p>After seeing results, teams can use their one-time wildcard:</p>
+      <div class="wildcard-teams-grid">
+        ${gameState.teams.map((team, idx) => {
+          if (team.isDisqualified) return '';
+
+          const valuationChange = team.valuation - team.previousValuation;
+          const changePercent = ((valuationChange / team.previousValuation) * 100).toFixed(1);
+          const isPositive = valuationChange >= 0;
+
+          if (team.wildcardUsed) {
+            return `
+              <div class="wildcard-team-card used" style="--team-color: ${team.color}">
+                <div class="wc-team-name">${team.isBot ? '🤖 ' : ''}${team.name}</div>
+                <div class="wc-change ${isPositive ? 'positive' : 'negative'}">
+                  ${isPositive ? '+' : ''}${formatCurrency(valuationChange)} (${isPositive ? '+' : ''}${changePercent}%)
+                </div>
+                <div class="wc-status used">Wildcard Used</div>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="wildcard-team-card" style="--team-color: ${team.color}">
+              <div class="wc-team-name">${team.isBot ? '🤖 ' : ''}${team.name}</div>
+              <div class="wc-change ${isPositive ? 'positive' : 'negative'}">
+                ${isPositive ? '+' : ''}${formatCurrency(valuationChange)} (${isPositive ? '+' : ''}${changePercent}%)
+              </div>
+              <div class="wc-actions">
+                ${isPositive ? `
+                  <button class="wc-btn double" onclick="useWildcard(${idx}, 'double')" title="Double your gains">
+                    ⚡ Double
+                  </button>
+                ` : `
+                  <button class="wc-btn shield" onclick="useWildcard(${idx}, 'shield')" title="Block your losses">
+                    🛡️ Shield
+                  </button>
+                `}
+                <button class="wc-btn pass" onclick="useWildcard(${idx}, 'pass')" title="Save for later">
+                  ➡️ Pass
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// Use wildcard after seeing round results
+function useWildcard(teamIndex, choice) {
+  const team = gameState.teams[teamIndex];
+
+  if (team.wildcardUsed && choice !== 'pass') {
+    showToast('Wildcard already used!', 'error');
+    return;
+  }
+
+  if (choice === 'pass') {
+    showToast(`${team.name} saved their wildcard for later`, 'info');
+    saveState();
+    render();
+    return;
+  }
+
+  // Apply wildcard effect
+  const valuationChange = team.valuation - team.previousValuation;
+
+  if (choice === 'double' && valuationChange > 0) {
+    // Double the gains
+    team.valuation = team.previousValuation + (valuationChange * 2);
+    team.wildcardEffect = 'doubled';
+    showToast(`${team.name} doubled their gains! +${formatCurrency(valuationChange)} → +${formatCurrency(valuationChange * 2)}`, 'success');
+  } else if (choice === 'shield' && valuationChange < 0) {
+    // Block the losses
+    team.valuation = team.previousValuation;
+    team.wildcardEffect = 'shielded';
+    showToast(`${team.name} blocked their losses! ${formatCurrency(valuationChange)} → ${formatCurrency(0)}`, 'success');
+  } else {
+    showToast(`Wildcard had no effect (wrong choice for this situation)`, 'warning');
+  }
+
+  team.wildcardUsed = true;
+  team.wildcardActiveThisRound = choice;
+
+  saveState();
+  render();
+}
+
+// Iteration 2: Start wildcard decision phase (legacy - kept for compatibility)
 function startWildcardPhase() {
   gameState.wildcardPhase = true;
   gameState.teamWildcardSelections = {};
@@ -870,6 +1054,7 @@ function nextRound() {
   if (currentIndex < phases.length - 1) {
     gameState.phase = phases[currentIndex + 1];
     gameState.currentMarketCard = null;
+    gameState.botWildcardDecidedThisRound = {};
   }
 
   saveState();
@@ -892,6 +1077,12 @@ function dropEmployee(teamIndex, employeeId) {
     gameState.phase = 'secondary-hire';
     gameState.secondaryPool = [...gameState.droppedEmployees, ...gameState.reserveEmployees];
     gameState.secondaryHired = [];
+    gameState.currentBid = { teamIndex: null, amount: 0 };
+
+    // Auto-select first card in spectator mode
+    if (isSpectatorMode() && gameState.secondaryPool.length > 0) {
+      gameState.selectedSecondaryCard = gameState.secondaryPool[0].id;
+    }
   }
 
   saveState();
@@ -952,19 +1143,129 @@ function closeSecondaryBidding() {
   render();
 }
 
-// Draw exit card
-function drawExitCard() {
-  const card = exitCards[Math.floor(Math.random() * exitCards.length)];
-  gameState.exitCard = card;
-
-  gameState.teams.forEach(team => {
-    if (!team.isDisqualified) {
-      team.valuation = Math.round(team.valuation * card.multiplier);
+// End secondary bidding - awards if there's a bid, skips candidate if not
+function endSecondaryBidding() {
+  if (gameState.currentBid.teamIndex !== null) {
+    closeSecondaryBidding();
+  } else {
+    // Skip this candidate - remove from pool
+    const cardIndex = gameState.secondaryPool.findIndex(e => e.id === gameState.selectedSecondaryCard);
+    if (cardIndex !== -1) {
+      const skipped = gameState.secondaryPool.splice(cardIndex, 1)[0];
+      showToast(`${skipped.name} not hired - removed from pool`, 'info');
     }
-  });
+
+    gameState.selectedSecondaryCard = null;
+    gameState.currentBid = { teamIndex: null, amount: 0 };
+
+    // Check if pool is empty
+    if (gameState.secondaryPool.length === 0) {
+      finishSecondaryHire();
+    } else {
+      saveState();
+      render();
+    }
+  }
+}
+
+// Legacy draw exit card - now each team picks individually
+function drawExitCard() {
+  // No longer used - each team picks their own exit
+  saveState();
+  render();
+}
+
+// Team chooses their exit strategy
+function chooseExit(teamIndex, exitId) {
+  const team = gameState.teams[teamIndex];
+  const exitCard = exitCards.find(e => e.id === exitId);
+
+  if (!exitCard) {
+    showToast('Invalid exit choice!', 'error');
+    return;
+  }
+
+  if (team.exitChoice) {
+    showToast('Exit already chosen!', 'error');
+    return;
+  }
+
+  // Store choice and apply multiplier
+  team.exitChoice = exitCard;
+  team.preExitValuation = team.valuation;
+  team.valuation = Math.round(team.valuation * exitCard.multiplier);
+
+  showToast(`${team.name} chose ${exitCard.name} (${exitCard.multiplier}x)!`, 'success');
 
   saveState();
   render();
+
+  // Check if all teams have chosen - then allow proceeding
+  const allChosen = gameState.teams.every(t => t.isDisqualified || t.exitChoice);
+  if (allChosen) {
+    gameState.exitCard = { name: 'Individual Exits', multiplier: 0 };
+    saveState();
+    render();
+
+    // Auto-declare winner in spectator mode
+    if (isSpectatorMode()) {
+      setTimeout(() => {
+        declareWinner();
+      }, BOT_TIMING.marketPause * 2);
+    }
+  }
+}
+
+// Bot chooses exit strategy
+function botChooseExit(teamIndex) {
+  const team = gameState.teams[teamIndex];
+  if (team.exitChoice || team.isDisqualified) return;
+
+  // Bot strategy: Trailing teams take MORE risk to catch up, leaders play safe
+  const rank = getValuationRank(team);
+
+  let chosenExit;
+  if (rank <= 2) {
+    // Leaders protect their lead with safer exits
+    // M&A (1.8x) is solid, JV (1.5x) is safest
+    if (Math.random() < 0.6) {
+      chosenExit = exitCards.find(e => e.name === 'M&A');
+    } else if (Math.random() < 0.7) {
+      chosenExit = exitCards.find(e => e.name === 'Joint Venture');
+    } else {
+      // 12% chance to go for IPO anyway
+      chosenExit = exitCards.find(e => e.name === 'IPO');
+    }
+  } else if (rank === 3) {
+    // Middle teams - balanced choice
+    const roll = Math.random();
+    if (roll < 0.4) {
+      chosenExit = exitCards.find(e => e.name === 'IPO');
+    } else if (roll < 0.8) {
+      chosenExit = exitCards.find(e => e.name === 'M&A');
+    } else {
+      chosenExit = exitCards.find(e => e.name === 'Joint Venture');
+    }
+  } else {
+    // Trailing teams (rank 4-5) - GO BIG OR GO HOME
+    // They need the 2.2x multiplier to have any chance
+    if (Math.random() < 0.75) {
+      chosenExit = exitCards.find(e => e.name === 'IPO');
+    } else {
+      chosenExit = exitCards.find(e => e.name === 'M&A');
+    }
+  }
+
+  // Fallback to first exit card if none found
+  if (!chosenExit) {
+    chosenExit = exitCards[0];
+  }
+
+  showBotThinking(team, `Choosing ${chosenExit.name}...`);
+  setTimeout(() => {
+    hideBotThinking();
+    chooseExit(teamIndex, chosenExit.id);
+  }, BOT_TIMING.thinkingDelay);
 }
 
 // Declare winner
@@ -1010,6 +1311,413 @@ function formatCurrency(value) {
     return `₹${(value / 1000000).toFixed(1)}M`;
   }
   return `₹${value.toLocaleString()}`;
+}
+
+// ==========================================
+// Iteration 6: Bot Helper Functions
+// ==========================================
+
+// Check if any human players are in the game
+function hasHumanPlayers() {
+  return gameState.teams.some(t => !t.isBot && !t.isDisqualified && t.isRegistered);
+}
+
+// Check if game is in spectator mode (all bots)
+function isSpectatorMode() {
+  return gameState.spectatorMode || (gameState.botsEnabled &&
+    gameState.teams.every(t => t.isBot || t.isDisqualified || !t.isRegistered));
+}
+
+// Check if it's currently a bot's turn
+function isBotTurn() {
+  const phase = gameState.phase;
+
+  if (phase === 'setup') {
+    const currentTeam = gameState.teams[gameState.setupDraftTurn];
+    return currentTeam?.isBot === true;
+  }
+
+  if (phase === 'setup-lock') {
+    // Check if any bot still needs to lock
+    return gameState.teams.some(t => t.isBot && !t.isDisqualified && !t.lockedSegment);
+  }
+
+  if (phase === 'auction') {
+    // Bots can bid anytime during auction
+    return gameState.botsEnabled;
+  }
+
+  if (phase === 'secondary-drop') {
+    // Check if any bot needs to drop
+    return gameState.teams.some(t => t.isBot && !t.isDisqualified && t.employees.length > 2);
+  }
+
+  if (phase === 'secondary-hire') {
+    return gameState.botsEnabled;
+  }
+
+  return false;
+}
+
+// Check if bot execution should be scheduled
+function shouldExecuteBotTurn() {
+  return gameState.botsEnabled && isBotTurn() && !gameState.botExecuting;
+}
+
+// Get appropriate delay based on whether humans are playing
+function getMarketDelay(baseDelay) {
+  if (!hasHumanPlayers()) {
+    return Math.floor(baseDelay * MARKET_TIMING.spectatorMultiplier);
+  }
+  return baseDelay;
+}
+
+// Get teams that can still bid in auction
+function getActiveBiddingTeams() {
+  return gameState.teams.filter(t =>
+    !t.isDisqualified &&
+    !t.isComplete &&
+    t.esopRemaining > gameState.currentBid.amount
+  );
+}
+
+// Get valuation rank for a team (1 = highest)
+function getValuationRank(team) {
+  const sortedTeams = gameState.teams
+    .filter(t => !t.isDisqualified)
+    .sort((a, b) => b.valuation - a.valuation);
+
+  const rank = sortedTeams.findIndex(t => t.name === team.name) + 1;
+  return rank || sortedTeams.length;
+}
+
+// ==========================================
+// Iteration 6: Bot Decision Functions
+// ==========================================
+
+// Calculate synergy score for a card based on potential bonuses
+function calculateSynergyScore(card, hand) {
+  let score = 0;
+
+  // Check if this is a segment card (no type property) or idea card (has type property)
+  const isSegment = !card.type;
+
+  if (isSegment) {
+    // For segments, score based on potential bonuses with ideas in hand
+    const ideas = hand.filter(c => c.type);
+    ideas.forEach(idea => {
+      const bonus = getSetupBonus(card.name, idea.name);
+      if (bonus) {
+        score += bonus.bonus.modifier * 100; // Convert to points
+      }
+    });
+    // Segments are more valuable (only 6 in deck vs 16 ideas)
+    score += 5;
+  } else {
+    // For ideas, score based on potential bonuses with segments in hand
+    const segments = hand.filter(c => !c.type);
+    segments.forEach(segment => {
+      const bonus = getSetupBonus(segment.name, card.name);
+      if (bonus) {
+        score += bonus.bonus.modifier * 100;
+      }
+    });
+  }
+
+  return score;
+}
+
+// Bot decision: which card to drop during setup draft
+function botDropDecision(team) {
+  const hand = team.setupHand;
+  if (hand.length === 0) return null;
+
+  // Score each card by synergy
+  const scoredCards = hand.map(card => ({
+    card,
+    score: calculateSynergyScore(card, hand)
+  }));
+
+  // Sort by score ascending (lowest score = best to drop)
+  scoredCards.sort((a, b) => a.score - b.score);
+
+  // Return the lowest-scoring card
+  return scoredCards[0].card;
+}
+
+// Bot decision: whether to draw and from which deck
+function botDrawDecision(team, round) {
+  const hand = team.setupHand;
+  const hasSegment = hand.some(c => !c.type);
+  const segmentDeckEmpty = gameState.segmentDeck.length === 0;
+  const ideaDeckEmpty = gameState.ideaDeck.length === 0;
+
+  // Critical: must have at least one segment
+  if (!hasSegment && !segmentDeckEmpty) {
+    return { action: 'draw', deck: 'segment' };
+  }
+
+  // Calculate current best combo value
+  let bestBonus = 0;
+  const segments = hand.filter(c => !c.type);
+  const ideas = hand.filter(c => c.type);
+
+  segments.forEach(seg => {
+    ideas.forEach(idea => {
+      const bonus = getSetupBonus(seg.name, idea.name);
+      if (bonus && bonus.bonus.modifier > bestBonus) {
+        bestBonus = bonus.bonus.modifier;
+      }
+    });
+  });
+
+  // Later rounds = more conservative (higher pass chance)
+  const passChance = 0.2 + (round * 0.15); // 20% → 35% → 50%
+
+  // If we have a good combo, consider passing
+  if (bestBonus >= 0.1 && Math.random() < passChance) {
+    return { action: 'pass' };
+  }
+
+  // Decide which deck to draw from
+  if (segmentDeckEmpty && ideaDeckEmpty) {
+    return { action: 'pass' };
+  }
+
+  if (segmentDeckEmpty) {
+    return { action: 'draw', deck: 'idea' };
+  }
+
+  if (ideaDeckEmpty) {
+    return { action: 'draw', deck: 'segment' };
+  }
+
+  // Prefer drawing what we need more
+  const segmentCount = segments.length;
+  const ideaCount = ideas.length;
+
+  if (segmentCount < 1) {
+    return { action: 'draw', deck: 'segment' };
+  }
+
+  // Generally prefer ideas as there are more combos
+  return { action: 'draw', deck: Math.random() < 0.7 ? 'idea' : 'segment' };
+}
+
+// Bot decision: which segment + idea to lock
+function botLockDecision(team) {
+  const hand = team.setupHand;
+  const segments = hand.filter(c => !c.type);
+  const ideas = hand.filter(c => c.type);
+
+  if (segments.length === 0 || ideas.length === 0) {
+    // Fallback: pick first available
+    return {
+      segment: segments[0] || null,
+      idea: ideas[0] || null
+    };
+  }
+
+  let bestCombo = { segment: segments[0], idea: ideas[0] };
+  let bestBonus = -Infinity;
+
+  segments.forEach(segment => {
+    ideas.forEach(idea => {
+      const bonus = getSetupBonus(segment.name, idea.name);
+      const value = bonus ? bonus.bonus.modifier : 0;
+
+      if (value > bestBonus) {
+        bestBonus = value;
+        bestCombo = { segment, idea };
+      }
+    });
+  });
+
+  return bestCombo;
+}
+
+// Score employee quality for auction bidding
+function scoreEmployeeQuality(employee, team) {
+  let score = employee.hardSkill * 10; // Base: 0-10 points
+
+  // Soft skills contribution
+  const softSkillTotal = Object.values(employee.softSkills).reduce((a, b) => a + b, 0);
+  score += softSkillTotal * 2;
+
+  // Category synergy with setup bonus
+  if (team.setupBonus?.bonus.category === employee.category) {
+    score *= 1.3; // 30% bonus for matching category
+  }
+
+  // Category diversity bonus (new perk = better)
+  if (!hasCategoryPerk(team, employee.category)) {
+    score *= 1.15; // New perk unlocked
+  }
+
+  // Diminishing returns for duplicate categories
+  const categoryCount = countEmployeesByCategory(team, employee.category);
+  if (categoryCount >= 1) score *= 0.85;
+  if (categoryCount >= 2) score *= 0.7;
+
+  return score;
+}
+
+// Calculate budget for bot bidding
+function calculateBotBudget(team, cardsRemaining) {
+  const employeesNeeded = 3 - team.employees.length;
+
+  if (employeesNeeded <= 0) return 0;
+
+  // Strict per-employee budget
+  const maxPerHire = team.esopRemaining / employeesNeeded;
+
+  // Add variance (±30%)
+  const variance = 0.7 + Math.random() * 0.6;
+
+  return Math.min(maxPerHire * variance, team.esopRemaining - 0.3);
+}
+
+// Bot decision: how much to bid on an employee
+function botBidDecision(team, employee, currentBid, cardsRemaining) {
+  const quality = scoreEmployeeQuality(employee, team);
+  const budget = calculateBotBudget(team, cardsRemaining);
+  const minBid = (currentBid || 0) + 0.5;
+
+  // Team can't afford to bid
+  if (minBid > team.esopRemaining || minBid > budget) {
+    return null; // Pass
+  }
+
+  // Desperation: if running low on ESOP but need employees
+  const employeesNeeded = 3 - team.employees.length;
+  const cardsLeft = cardsRemaining;
+  const desperate = employeesNeeded > 0 && cardsLeft <= employeesNeeded * 2;
+
+  if (desperate) {
+    // Bid more aggressively
+    const desperateBid = Math.min(team.esopRemaining * 0.8, budget * 1.3);
+    if (desperateBid > minBid) {
+      return {
+        bid: Math.round(Math.max(minBid, desperateBid * 0.9) * 10) / 10,
+        rationale: `Desperate for employees (${employeesNeeded} needed, ${cardsLeft} cards left)`
+      };
+    }
+  }
+
+  // Quality-based bidding
+  const qualityMultiplier = 0.5 + (quality / 20); // 0.5 - 1.0 range
+  let maxBid = Math.min(budget, team.esopRemaining * qualityMultiplier);
+
+  // Opening bid: start at 60-80% of max
+  if (currentBid === 0 || currentBid === null) {
+    const openingBid = maxBid * (0.6 + Math.random() * 0.2);
+    return {
+      bid: Math.round(Math.max(0.5, openingBid) * 10) / 10,
+      rationale: `Opening bid for ${employee.name} (quality: ${quality.toFixed(1)})`
+    };
+  }
+
+  // Can't outbid
+  if (currentBid >= maxBid) {
+    // Small chance to bid anyway (desperation)
+    const desperationChance = 0.15 + (0.3 * (1 - team.esopRemaining / 12));
+    if (Math.random() < desperationChance && minBid <= team.esopRemaining) {
+      return {
+        bid: Math.round(minBid * 10) / 10,
+        rationale: `Desperation bid for ${employee.name}`
+      };
+    }
+    return null; // Pass
+  }
+
+  // Outbid: increment by quality-based amount
+  const increment = 0.5 + (quality / 15);
+  const newBid = Math.min(currentBid + increment, maxBid);
+
+  return {
+    bid: Math.round(newBid * 10) / 10,
+    rationale: `Outbidding for ${employee.name} (quality: ${quality.toFixed(1)})`
+  };
+}
+
+// Bot decision: wildcard usage based on round results
+function botWildcardDecision(team, roundResults) {
+  if (team.wildcardUsed) return null;
+
+  const valuationChange = roundResults?.valuationDelta || (team.valuation - team.previousValuation);
+  const swingPercent = Math.abs(valuationChange) / team.previousValuation;
+  const rank = getValuationRank(team);
+  const isFinalRound = gameState.phase === 'mature';
+
+  // Determine threshold based on game stage
+  const threshold = isFinalRound ? 0.08 : 0.12;
+
+  // Small swing - usually save wildcard
+  if (swingPercent < threshold) {
+    // Final round: higher chance to use it (use it or lose it)
+    if (isFinalRound && Math.random() < 0.5) {
+      return valuationChange > 0 ? 'double' : 'shield';
+    }
+    return null; // Pass
+  }
+
+  // TRAILING TEAMS (rank 4-5): Aggressive catch-up strategy
+  if (rank >= 4) {
+    if (valuationChange > 0) {
+      // Big gains? DOUBLE to catch up! (80% chance)
+      if (Math.random() < 0.8) return 'double';
+    } else if (valuationChange < 0 && swingPercent > 0.20) {
+      // Only shield catastrophic losses
+      return 'shield';
+    }
+    // Otherwise save for a better opportunity
+    return null;
+  }
+
+  // LEADERS (rank 1-2): Conservative - protect the lead
+  if (rank <= 2) {
+    if (valuationChange < 0 && swingPercent > 0.15) {
+      // Shield losses to protect lead (70% chance)
+      if (Math.random() < 0.7) return 'shield';
+    } else if (valuationChange > 0 && isFinalRound) {
+      // Only double in final round to secure win
+      return 'double';
+    }
+    // Otherwise save - they're already ahead
+    return null;
+  }
+
+  // MIDDLE TEAMS (rank 3): Balanced approach
+  if (valuationChange > 0 && swingPercent > 0.15) {
+    return Math.random() < 0.5 ? 'double' : null;
+  } else if (valuationChange < 0 && swingPercent > 0.18) {
+    return Math.random() < 0.5 ? 'shield' : null;
+  }
+
+  return null; // Save for later
+}
+
+// Bot decision: which employee to drop in secondary phase
+function botSecondaryDropDecision(team) {
+  if (team.employees.length <= 2) return null;
+
+  // Score each employee (lower = worse = drop candidate)
+  const scoredEmployees = team.employees.map(emp => {
+    let value = scoreEmployeeQuality(emp, team);
+
+    // Penalty for dropping last of a category (lose perk)
+    const categoryCount = countEmployeesByCategory(team, emp.category);
+    if (categoryCount === 1) {
+      value *= 1.5; // Don't want to drop this one
+    }
+
+    return { employee: emp, value };
+  });
+
+  // Sort by value ascending (lowest = best to drop)
+  scoredEmployees.sort((a, b) => a.value - b.value);
+
+  return scoredEmployees[0].employee;
 }
 
 // Open bid modal
@@ -1203,10 +1911,612 @@ function render() {
       renderWinner(app);
       break;
   }
+
+  // Iteration 6: Schedule bot actions after render
+  scheduleNextBotAction();
+}
+
+// ==========================================
+// Iteration 6: Bot Execution System
+// ==========================================
+
+// Schedule the next bot action if applicable
+function scheduleNextBotAction() {
+  if (!gameState.botsEnabled) return;
+  if (gameState.botExecuting) return;
+
+  const phase = gameState.phase;
+
+  // Setup draft - bot's turn
+  if (phase === 'setup' && isBotTurn()) {
+    gameState.botExecuting = true;
+    setTimeout(() => {
+      executeBotSetupTurn();
+      gameState.botExecuting = false;
+    }, BOT_TIMING.turnDelay);
+    return;
+  }
+
+  // Setup lock - bots lock their cards
+  if (phase === 'setup-lock') {
+    const botsNeedingLock = gameState.teams.filter(t =>
+      t.isBot && !t.isDisqualified && !t.lockedSegment
+    );
+    if (botsNeedingLock.length > 0) {
+      gameState.botExecuting = true;
+      executeBotSetupLocks();
+      return;
+    }
+  }
+
+  // Auction - bots place bids
+  if (phase === 'auction') {
+    // Give a delay then have bots consider bidding
+    gameState.botExecuting = true;
+    setTimeout(() => {
+      executeBotAuctionBidding();
+      gameState.botExecuting = false;
+    }, BOT_TIMING.auctionDelay);
+    return;
+  }
+
+  // Wildcard phase - bots make decisions
+  // Wildcard phase - process bots one at a time
+  if (gameState.wildcardPhase) {
+    const botNeedingDecision = gameState.teams.findIndex((t, idx) =>
+      t.isBot && !t.isDisqualified && gameState.teamWildcardSelections[idx] === undefined
+    );
+    if (botNeedingDecision !== -1) {
+      gameState.botExecuting = true;
+      setTimeout(() => {
+        executeSingleBotWildcard(botNeedingDecision);
+        setTimeout(() => {
+          gameState.botExecuting = false;
+          scheduleNextBotAction();
+        }, BOT_TIMING.thinkingDelay + BOT_TIMING.actionDelay);
+      }, BOT_TIMING.actionDelay);
+      return;
+    }
+  }
+
+  // Secondary drop - bots drop employees
+  if (phase === 'secondary-drop') {
+    const botsNeedingDrop = gameState.teams.filter(t =>
+      t.isBot && !t.isDisqualified && t.employees.length > 2
+    );
+    if (botsNeedingDrop.length > 0) {
+      gameState.botExecuting = true;
+      setTimeout(() => {
+        executeBotSecondaryDrops();
+        gameState.botExecuting = false;
+      }, BOT_TIMING.actionDelay);
+      return;
+    } else if (isSpectatorMode()) {
+      // No drops needed - auto-advance in spectator mode
+      gameState.botExecuting = true;
+      setTimeout(() => {
+        gameState.botExecuting = false;
+        advanceFromSecondaryDrop();
+      }, BOT_TIMING.actionDelay);
+      return;
+    }
+  }
+
+  // Secondary hire - bots place bids
+  if (phase === 'secondary-hire') {
+    // First check if a card needs to be selected
+    if (!gameState.selectedSecondaryCard && isSpectatorMode() && gameState.secondaryPool.length > 0) {
+      gameState.botExecuting = true;
+      setTimeout(() => {
+        // Auto-select best card for bots
+        let bestCard = gameState.secondaryPool[0];
+        let bestScore = -Infinity;
+
+        gameState.secondaryPool.forEach(emp => {
+          const avgScore = gameState.teams
+            .filter(t => t.isBot && !t.isDisqualified && !gameState.secondaryHired.includes(gameState.teams.indexOf(t)))
+            .reduce((sum, t) => sum + scoreEmployeeQuality(emp, t), 0);
+          if (avgScore > bestScore) {
+            bestScore = avgScore;
+            bestCard = emp;
+          }
+        });
+
+        gameState.botExecuting = false;
+        selectSecondaryCard(bestCard.id);
+      }, BOT_TIMING.actionDelay);
+      return;
+    }
+
+    // Card is selected, bots can bid
+    if (gameState.selectedSecondaryCard) {
+      gameState.botExecuting = true;
+      setTimeout(() => {
+        gameState.botExecuting = false;
+        executeBotSecondaryBidding();
+      }, BOT_TIMING.auctionDelay);
+      return;
+    }
+  }
+
+  // Exit phase - bots choose their exit strategy (process one at a time)
+  if (phase === 'exit') {
+    const botNeedingExit = gameState.teams.find(t =>
+      t.isBot && !t.isDisqualified && !t.exitChoice
+    );
+    if (botNeedingExit) {
+      gameState.botExecuting = true;
+      const teamIndex = gameState.teams.indexOf(botNeedingExit);
+
+      setTimeout(() => {
+        botChooseExit(teamIndex);
+        // After thinking delay, allow next bot to be scheduled
+        setTimeout(() => {
+          gameState.botExecuting = false;
+          scheduleNextBotAction();
+        }, BOT_TIMING.thinkingDelay + BOT_TIMING.actionDelay);
+      }, BOT_TIMING.lockStagger);
+      return;
+    }
+  }
+
+  // Market rounds - bots make wildcard decisions after results (works in both mixed and spectator mode)
+  if (['seed', 'early', 'mature'].includes(phase) && gameState.currentMarketCard && gameState.botsEnabled) {
+    // Find a bot that hasn't made a wildcard decision this round
+    const botToDecide = gameState.teams.find((t, idx) =>
+      t.isBot && !t.isDisqualified && !t.wildcardUsed &&
+      !gameState.botWildcardDecidedThisRound?.[idx]
+    );
+
+    if (botToDecide) {
+      gameState.botExecuting = true;
+      const teamIndex = gameState.teams.indexOf(botToDecide);
+
+      setTimeout(() => {
+        executeBotWildcardInline(teamIndex);
+        setTimeout(() => {
+          gameState.botExecuting = false;
+          scheduleNextBotAction();
+        }, BOT_TIMING.thinkingDelay + BOT_TIMING.actionDelay);
+      }, BOT_TIMING.actionDelay);
+      return;
+    }
+  }
+
+  // Spectator mode auto-actions for phases that need user interaction
+  if (isSpectatorMode()) {
+    // Market rounds - auto-draw if no card drawn yet
+    if (['seed', 'early', 'mature'].includes(phase) && !gameState.currentMarketCard) {
+      gameState.botExecuting = true;
+      setTimeout(() => {
+        gameState.botExecuting = false;
+        drawMarketCard();
+        // After drawing, schedule bot wildcard decisions
+        scheduleNextBotAction();
+      }, BOT_TIMING.marketPause);
+      return;
+    }
+
+    // Market rounds - all bots decided, auto-continue to next round
+    if (['seed', 'early', 'mature'].includes(phase) && gameState.currentMarketCard) {
+      gameState.botExecuting = true;
+      setTimeout(() => {
+        // Reset wildcard decisions for next round
+        gameState.botWildcardDecidedThisRound = {};
+        gameState.botExecuting = false;
+        nextRound();
+      }, BOT_TIMING.marketPause);
+      return;
+    }
+
+    // Auction summary - auto-continue
+    if (phase === 'auction-summary') {
+      gameState.botExecuting = true;
+      setTimeout(() => {
+        gameState.botExecuting = false;
+        startMarketRounds();
+      }, BOT_TIMING.marketPause);
+      return;
+    }
+
+    // Setup summary - auto-continue
+    if (phase === 'setup-summary') {
+      gameState.botExecuting = true;
+      setTimeout(() => {
+        gameState.botExecuting = false;
+        startAuctionFromSetup();
+      }, BOT_TIMING.marketPause);
+      return;
+    }
+  }
+}
+
+// Execute bot's turn during setup draft
+function executeBotSetupTurn() {
+  const teamIndex = gameState.setupDraftTurn;
+  const team = gameState.teams[teamIndex];
+
+  if (!team.isBot) return;
+
+  // Drop phase
+  if (gameState.setupPhase === 'drop') {
+    const cardToDrop = botDropDecision(team);
+    if (cardToDrop) {
+      const isSegment = !cardToDrop.type;
+      showBotThinking(team, 'Deciding which card to drop...');
+      setTimeout(() => {
+        hideBotThinking();
+        dropSetupCard(teamIndex, cardToDrop.id, isSegment);
+      }, BOT_TIMING.thinkingDelay);
+    }
+  }
+  // Draw phase
+  else if (gameState.setupPhase === 'draw') {
+    const decision = botDrawDecision(team, gameState.setupRound);
+    showBotThinking(team, decision.action === 'pass' ? 'Deciding to pass...' : `Drawing from ${decision.deck} deck...`);
+    setTimeout(() => {
+      hideBotThinking();
+      if (decision.action === 'draw') {
+        drawSetupCard(teamIndex, decision.deck);
+      } else {
+        skipSetupDraw(teamIndex);
+      }
+    }, BOT_TIMING.thinkingDelay);
+  }
+}
+
+// Execute bot lock decisions during setup-lock phase
+function executeBotSetupLocks() {
+  const botsNeedingLock = gameState.teams.filter(t =>
+    t.isBot && !t.isDisqualified && !t.lockedSegment
+  );
+
+  let delay = 0;
+  botsNeedingLock.forEach((team) => {
+    const teamIndex = gameState.teams.indexOf(team);
+    setTimeout(() => {
+      const decision = botLockDecision(team);
+      if (decision.segment && decision.idea) {
+        showBotThinking(team, 'Locking segment and idea...');
+        setTimeout(() => {
+          hideBotThinking();
+          lockSetupCards(teamIndex, decision.segment.id, decision.idea.id);
+        }, BOT_TIMING.thinkingDelay);
+      }
+    }, delay);
+    delay += BOT_TIMING.lockStagger;
+  });
+
+  // Reset botExecuting after all locks complete
+  setTimeout(() => {
+    gameState.botExecuting = false;
+  }, delay + BOT_TIMING.thinkingDelay + 100);
+}
+
+// Execute bot bidding during auction
+function executeBotAuctionBidding() {
+  const currentCard = getCurrentCard();
+  if (!currentCard) return;
+
+  const cardsRemaining = gameState.employeeDeck.length - gameState.currentCardIndex;
+
+  // Get bots that can still bid
+  const eligibleBots = gameState.teams.filter((t, idx) =>
+    t.isBot &&
+    !t.isDisqualified &&
+    !t.isComplete &&
+    t.esopRemaining > gameState.currentBid.amount &&
+    idx !== gameState.currentBid.teamIndex // Don't outbid self
+  );
+
+  if (eligibleBots.length === 0) {
+    // No bots can bid - check if we should close bidding in spectator mode
+    if (isSpectatorMode()) {
+      setTimeout(() => {
+        if (gameState.currentBid.teamIndex !== null) {
+          closeBidding();
+        } else {
+          skipCard();
+        }
+      }, BOT_TIMING.actionDelay);
+    }
+    return;
+  }
+
+  // Have each eligible bot decide whether to bid
+  const bids = [];
+  eligibleBots.forEach((team) => {
+    const decision = botBidDecision(team, currentCard, gameState.currentBid.amount, cardsRemaining);
+    if (decision) {
+      bids.push({
+        team,
+        teamIndex: gameState.teams.indexOf(team),
+        ...decision
+      });
+    }
+  });
+
+  if (bids.length === 0) {
+    // No bots want to bid - close bidding in spectator mode
+    if (isSpectatorMode()) {
+      setTimeout(() => {
+        if (gameState.currentBid.teamIndex !== null) {
+          closeBidding();
+        } else {
+          skipCard();
+        }
+      }, BOT_TIMING.actionDelay);
+    }
+    return;
+  }
+
+  // Pick a random bot to bid (add variety)
+  const selectedBid = bids[Math.floor(Math.random() * bids.length)];
+
+  // Verify bid is still valid (race condition check)
+  if (selectedBid.bid > gameState.currentBid.amount &&
+      selectedBid.bid <= selectedBid.team.esopRemaining) {
+    showBotThinking(selectedBid.team, selectedBid.rationale);
+    setTimeout(() => {
+      hideBotThinking();
+      placeBid(selectedBid.teamIndex, selectedBid.bid);
+    }, BOT_TIMING.thinkingDelay);
+  }
+}
+
+// Execute bot wildcard decisions
+// Execute wildcard decision for a single bot (legacy phase-based)
+function executeSingleBotWildcard(teamIndex) {
+  const team = gameState.teams[teamIndex];
+  if (!team.isBot || team.isDisqualified || gameState.teamWildcardSelections[teamIndex] !== undefined) {
+    return;
+  }
+
+  const roundResults = {
+    valuationDelta: team.valuation - team.previousValuation
+  };
+  const decision = botWildcardDecision(team, roundResults);
+
+  showBotThinking(team, decision ? `Playing ${decision === 'double' ? 'Double Down ⚡' : 'Shield 🛡️'}...` : 'Passing on wildcard...');
+  setTimeout(() => {
+    hideBotThinking();
+    selectWildcard(teamIndex, decision);
+  }, BOT_TIMING.thinkingDelay);
+}
+
+// Execute inline wildcard decision for spectator mode
+function executeBotWildcardInline(teamIndex) {
+  const team = gameState.teams[teamIndex];
+  if (!team.isBot || team.isDisqualified || team.wildcardUsed) {
+    // Mark as decided this round
+    if (!gameState.botWildcardDecidedThisRound) {
+      gameState.botWildcardDecidedThisRound = {};
+    }
+    gameState.botWildcardDecidedThisRound[teamIndex] = true;
+    return;
+  }
+
+  const roundResults = {
+    valuationDelta: team.valuation - team.previousValuation
+  };
+  const decision = botWildcardDecision(team, roundResults);
+
+  // Mark as decided this round
+  if (!gameState.botWildcardDecidedThisRound) {
+    gameState.botWildcardDecidedThisRound = {};
+  }
+  gameState.botWildcardDecidedThisRound[teamIndex] = true;
+
+  if (decision) {
+    showBotThinking(team, `Playing ${decision === 'double' ? 'Double Down ⚡' : 'Shield 🛡️'}...`);
+    setTimeout(() => {
+      hideBotThinking();
+      useWildcard(teamIndex, decision);
+    }, BOT_TIMING.thinkingDelay);
+  } else {
+    // Bot passes - just mark as decided, don't need to call useWildcard
+    showBotThinking(team, 'Saving wildcard for later...');
+    setTimeout(() => {
+      hideBotThinking();
+    }, BOT_TIMING.thinkingDelay / 2);
+  }
+}
+
+// Execute bot drops during secondary-drop phase
+function executeBotSecondaryDrops() {
+  gameState.teams.forEach((team, idx) => {
+    if (team.isBot && !team.isDisqualified && team.employees.length > 2) {
+      const employeeToDrop = botSecondaryDropDecision(team);
+      if (employeeToDrop) {
+        showBotThinking(team, `Dropping ${employeeToDrop.name}...`);
+        setTimeout(() => {
+          hideBotThinking();
+          dropEmployee(idx, employeeToDrop.id);
+        }, BOT_TIMING.thinkingDelay);
+      }
+    }
+  });
+}
+
+// Advance from secondary-drop to secondary-hire
+function advanceFromSecondaryDrop() {
+  // Check if any team still needs to drop
+  const teamsNeedingDrop = gameState.teams.filter(t =>
+    !t.isDisqualified && t.employees.length > 2
+  );
+
+  if (teamsNeedingDrop.length === 0) {
+    // Advance to secondary-hire
+    gameState.phase = 'secondary-hire';
+    gameState.secondaryPool = [...gameState.droppedEmployees, ...gameState.reserveEmployees];
+    gameState.secondaryHired = [];
+    gameState.currentBid = { teamIndex: null, amount: 0 };
+
+    // Auto-select first card in spectator mode
+    if (isSpectatorMode() && gameState.secondaryPool.length > 0) {
+      gameState.selectedSecondaryCard = gameState.secondaryPool[0].id;
+    }
+
+    saveState();
+    render();
+  }
+}
+
+// Execute bot bidding during secondary-hire
+function executeBotSecondaryBidding() {
+  if (!gameState.selectedSecondaryCard) {
+    // Card selection is now handled in scheduleNextBotAction
+    return;
+  }
+
+  const selectedEmployee = gameState.secondaryPool.find(e => e.id === gameState.selectedSecondaryCard);
+  if (!selectedEmployee) return;
+
+  // Get bots that can still bid (haven't hired in secondary yet)
+  const eligibleBots = gameState.teams.filter((t, idx) =>
+    t.isBot &&
+    !t.isDisqualified &&
+    !gameState.secondaryHired.includes(idx) &&
+    t.esopRemaining > gameState.currentBid.amount &&
+    idx !== gameState.currentBid.teamIndex
+  );
+
+  if (eligibleBots.length === 0) {
+    // No bots can bid
+    if (isSpectatorMode()) {
+      setTimeout(() => {
+        if (gameState.currentBid.teamIndex !== null) {
+          closeSecondaryBidding();
+        } else {
+          // Remove card from pool and try next
+          const cardIndex = gameState.secondaryPool.findIndex(e => e.id === gameState.selectedSecondaryCard);
+          if (cardIndex !== -1) {
+            gameState.secondaryPool.splice(cardIndex, 1);
+          }
+          gameState.selectedSecondaryCard = null;
+          gameState.currentBid = { teamIndex: null, amount: 0 };
+
+          if (gameState.secondaryPool.length === 0) {
+            finishSecondaryHire();
+          } else {
+            saveState();
+            render();
+            // Trigger next bot action after render
+            scheduleNextBotAction();
+          }
+        }
+      }, BOT_TIMING.actionDelay);
+    }
+    return;
+  }
+
+  // Have bots decide
+  const bids = [];
+  eligibleBots.forEach((team) => {
+    // Use urgency modifier for secondary auction
+    const decision = botBidDecision(team, selectedEmployee, gameState.currentBid.amount, gameState.secondaryPool.length);
+    if (decision) {
+      bids.push({
+        team,
+        teamIndex: gameState.teams.indexOf(team),
+        bid: Math.min(decision.bid * 1.2, team.esopRemaining), // 20% urgency boost
+        rationale: decision.rationale
+      });
+    }
+  });
+
+  if (bids.length === 0) {
+    if (isSpectatorMode()) {
+      setTimeout(() => {
+        if (gameState.currentBid.teamIndex !== null) {
+          closeSecondaryBidding();
+        } else {
+          // Skip this card
+          const cardIndex = gameState.secondaryPool.findIndex(e => e.id === gameState.selectedSecondaryCard);
+          if (cardIndex !== -1) {
+            gameState.secondaryPool.splice(cardIndex, 1);
+          }
+          gameState.selectedSecondaryCard = null;
+          gameState.currentBid = { teamIndex: null, amount: 0 };
+
+          if (gameState.secondaryPool.length === 0) {
+            finishSecondaryHire();
+          } else {
+            saveState();
+            render();
+          }
+        }
+      }, BOT_TIMING.actionDelay);
+    }
+    return;
+  }
+
+  const selectedBid = bids[Math.floor(Math.random() * bids.length)];
+
+  if (selectedBid.bid > gameState.currentBid.amount) {
+    showBotThinking(selectedBid.team, selectedBid.rationale);
+    setTimeout(() => {
+      hideBotThinking();
+      placeBid(selectedBid.teamIndex, Math.round(selectedBid.bid * 10) / 10);
+    }, BOT_TIMING.thinkingDelay);
+  }
+}
+
+// Finish secondary hire phase
+function finishSecondaryHire() {
+  // Apply penalties for teams with fewer than 3 employees
+  gameState.teams.forEach((team) => {
+    if (team.isDisqualified) return;
+    const missingEmployees = 3 - team.employees.length;
+    if (missingEmployees > 0) {
+      const penalty = missingEmployees * 1000000;
+      team.valuation = Math.max(0, team.valuation - penalty);
+      team.hiringPenalty = (team.hiringPenalty || 0) + penalty;
+      showToast(`${team.name} penalized ${formatCurrency(penalty)} for missing ${missingEmployees} employee(s)`, 'warning');
+    }
+  });
+
+  // Advance to mature phase
+  gameState.phase = 'mature';
+  saveState();
+  render();
+}
+
+// Show bot thinking overlay
+function showBotThinking(team, message) {
+  let overlay = document.getElementById('botThinkingOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'botThinkingOverlay';
+    overlay.className = 'bot-thinking-overlay';
+    document.body.appendChild(overlay);
+  }
+
+  overlay.innerHTML = `
+    <div class="bot-thinking-content" style="--team-color: ${team.color}">
+      <div class="bot-thinking-icon">🤖</div>
+      <div class="bot-thinking-team">${team.name}</div>
+      <div class="bot-thinking-message">${message}</div>
+      <div class="bot-thinking-spinner"></div>
+    </div>
+  `;
+  overlay.classList.add('visible');
+}
+
+// Hide bot thinking overlay
+function hideBotThinking() {
+  const overlay = document.getElementById('botThinkingOverlay');
+  if (overlay) {
+    overlay.classList.remove('visible');
+  }
 }
 
 // Render registration phase
 function renderRegistration(app) {
+  const canStartWithBots = gameState.fillWithBots && gameState.registeredTeams >= 1;
+  const canStart = gameState.registeredTeams >= 5 || canStartWithBots;
+  const botsNeeded = 5 - gameState.registeredTeams;
+
   app.innerHTML = `
     <div class="game-container">
       <header class="game-header">
@@ -1231,11 +2541,13 @@ function renderRegistration(app) {
 
         <div class="registration-grid">
           ${gameState.teams.map((team, index) => `
-            <div class="registration-card ${team.isRegistered ? 'registered' : ''}" style="--team-color: ${team.color}">
+            <div class="registration-card ${team.isRegistered ? 'registered' : ''} ${team.isBot ? 'is-bot' : ''}" style="--team-color: ${team.color}">
               <div class="reg-card-header">
-                <div class="reg-card-icon" style="background: ${team.color}">${team.name.charAt(0)}</div>
+                <div class="reg-card-icon" style="background: ${team.color}">
+                  ${team.isBot ? '🤖' : team.name.charAt(0)}
+                </div>
                 <div class="reg-card-title">
-                  <h3>${team.name}</h3>
+                  <h3>${team.isBot ? team.name : team.name} ${team.isBot ? '<span class="bot-badge">BOT</span>' : ''}</h3>
                   ${team.isRegistered
                     ? '<span class="reg-status registered">Registered</span>'
                     : '<span class="reg-status pending">Pending</span>'}
@@ -1247,22 +2559,42 @@ function renderRegistration(app) {
                   <p>${team.problemStatement}</p>
                 </div>
               ` : ''}
-              <button class="reg-card-btn ${team.isRegistered ? 'edit' : ''}"
-                      onclick="openRegistrationModal(${index})">
-                ${team.isRegistered ? 'Edit Details' : 'Register Team'}
-              </button>
+              ${!team.isBot ? `
+                <button class="reg-card-btn ${team.isRegistered ? 'edit' : ''}"
+                        onclick="openRegistrationModal(${index})">
+                  ${team.isRegistered ? 'Edit Details' : 'Register Team'}
+                </button>
+              ` : ''}
             </div>
           `).join('')}
         </div>
 
         <div class="registration-actions">
-          <button class="action-btn primary large ${gameState.registeredTeams < 5 ? 'disabled' : ''}"
-                  onclick="startAuction()"
-                  ${gameState.registeredTeams < 5 ? 'disabled' : ''}>
-            ${gameState.registeredTeams < 5
-              ? `Register ${5 - gameState.registeredTeams} More Team${5 - gameState.registeredTeams > 1 ? 's' : ''} to Start`
-              : 'Start Auction'}
-          </button>
+          <div class="bot-option">
+            <label class="bot-checkbox-label">
+              <input type="checkbox"
+                     id="fillWithBots"
+                     ${gameState.fillWithBots ? 'checked' : ''}
+                     onchange="toggleFillWithBots(this.checked)">
+              <span class="bot-checkbox-text">
+                🤖 Fill remaining slots with bots
+                ${gameState.fillWithBots && botsNeeded > 0 ? `<span class="bot-count">(${botsNeeded} bot${botsNeeded > 1 ? 's' : ''})</span>` : ''}
+              </span>
+            </label>
+          </div>
+
+          <div class="registration-buttons">
+            <button class="action-btn primary large ${!canStart ? 'disabled' : ''}"
+                    onclick="startGameWithBots()"
+                    ${!canStart ? 'disabled' : ''}>
+              ${getStartButtonText(canStart, canStartWithBots, botsNeeded)}
+            </button>
+
+            <button class="action-btn secondary spectator-btn"
+                    onclick="startSpectatorMode()">
+              👁️ Watch Bots Play
+            </button>
+          </div>
         </div>
       </main>
 
@@ -1270,7 +2602,7 @@ function renderRegistration(app) {
         <div class="game-rules">
           <h4>Quick Rules</h4>
           <ul>
-            <li>Each team starts with 10% ESOP pool</li>
+            <li>Each team starts with 12% ESOP pool</li>
             <li>Bid equity to hire employees (3 per team)</li>
             <li>Market conditions affect valuations</li>
             <li>Highest valuation at exit wins!</li>
@@ -1279,6 +2611,96 @@ function renderRegistration(app) {
       </footer>
     </div>
   `;
+}
+
+// Get appropriate text for start button
+function getStartButtonText(canStart, canStartWithBots, botsNeeded) {
+  if (!canStart) {
+    if (gameState.fillWithBots) {
+      return 'Register at least 1 team to start';
+    }
+    return `Register ${5 - gameState.registeredTeams} More Team${5 - gameState.registeredTeams > 1 ? 's' : ''} to Start`;
+  }
+
+  if (canStartWithBots && botsNeeded > 0) {
+    return `Start with ${botsNeeded} Bot${botsNeeded > 1 ? 's' : ''} 🤖`;
+  }
+
+  return 'Start Game';
+}
+
+// Toggle fill with bots option
+function toggleFillWithBots(checked) {
+  gameState.fillWithBots = checked;
+  saveState();
+  render();
+}
+
+// Start game with bots filling empty slots
+function startGameWithBots() {
+  const registeredTeams = gameState.teams.filter(t => t.isRegistered);
+  const emptySlots = 5 - registeredTeams.length;
+
+  if (emptySlots > 0 && gameState.fillWithBots) {
+    const usedNames = [];
+    const usedStatements = [];
+
+    // Create bots for empty slots
+    gameState.teams.forEach((team, idx) => {
+      if (!team.isRegistered) {
+        const botName = generateBotName(usedNames);
+        usedNames.push(botName);
+
+        const problemStatement = getRandomBotProblemStatement(usedStatements);
+        usedStatements.push(problemStatement);
+
+        team.isRegistered = true;
+        team.isBot = true;
+        team.name = botName;
+        team.problemStatement = problemStatement;
+        gameState.registeredTeams++;
+      }
+    });
+
+    gameState.botCount = emptySlots;
+  }
+
+  gameState.botsEnabled = gameState.botCount > 0;
+
+  saveState();
+
+  // Start the actual game (setup phase)
+  startAuction();
+}
+
+// Start spectator mode - all 5 teams are bots
+function startSpectatorMode() {
+  const usedNames = [];
+  const usedStatements = [];
+
+  // Make all teams bots
+  gameState.teams.forEach((team) => {
+    const botName = generateBotName(usedNames);
+    usedNames.push(botName);
+
+    const problemStatement = getRandomBotProblemStatement(usedStatements);
+    usedStatements.push(problemStatement);
+
+    team.isRegistered = true;
+    team.isBot = true;
+    team.name = botName;
+    team.problemStatement = problemStatement;
+  });
+
+  gameState.registeredTeams = 5;
+  gameState.botCount = 5;
+  gameState.botsEnabled = true;
+  gameState.spectatorMode = true;
+
+  showToast('Spectator Mode: Watch the bots compete!', 'info');
+
+  saveState();
+  startAuction();
 }
 
 // Render phase bar
@@ -1299,7 +2721,15 @@ function renderPhaseBar(activePhase) {
   const normalizedPhase = activePhase.startsWith('setup') ? 'setup' : activePhase;
   const activeIndex = phaseOrder.indexOf(normalizedPhase);
 
+  const spectatorBadge = isSpectatorMode() ? `
+    <div class="spectator-indicator">
+      <span class="eye-icon">👁️</span>
+      <span>Spectator Mode</span>
+    </div>
+  ` : '';
+
   return `
+    ${spectatorBadge}
     <nav class="phase-nav">
       ${phases.map((phase, idx) => {
         let status = '';
@@ -1344,11 +2774,11 @@ function renderTeamsSidebar() {
         const salesCount = countEmployeesByCategory(team, 'Sales');
 
         return `
-          <div class="sidebar-team ${team.isComplete ? 'complete' : ''} ${team.isDisqualified ? 'disqualified' : ''}"
+          <div class="sidebar-team ${team.isComplete ? 'complete' : ''} ${team.isDisqualified ? 'disqualified' : ''} ${team.isBot ? 'is-bot' : ''}"
                style="--team-color: ${team.color}"
                onclick="viewTeamDetails(${index})">
             <div class="sidebar-team-header">
-              <span class="sidebar-team-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
+              <span class="sidebar-team-icon" style="background: ${team.color}">${team.isBot ? '🤖' : team.name.charAt(0)}</span>
               <span class="sidebar-team-name">${team.name}</span>
             </div>
             ${team.lockedSegment && team.lockedIdea ? `
@@ -1481,11 +2911,11 @@ function renderAuction(app) {
 
               <div class="bid-teams-grid">
                 ${gameState.teams.map((team, index) => `
-                  <button class="bid-team-btn ${team.isComplete ? 'complete' : ''} ${gameState.currentBid.teamIndex === index ? 'leading' : ''}"
+                  <button class="bid-team-btn ${team.isComplete ? 'complete' : ''} ${gameState.currentBid.teamIndex === index ? 'leading' : ''} ${team.isBot ? 'is-bot' : ''}"
                           style="--team-color: ${team.color}"
                           onclick="openBidModal(${index})"
                           ${team.isComplete || team.esopRemaining <= gameState.currentBid.amount ? 'disabled' : ''}>
-                    <span class="btn-team-name">${team.name}</span>
+                    <span class="btn-team-name">${team.isBot ? '🤖 ' : ''}${team.name}</span>
                     <span class="btn-team-esop">${team.esopRemaining.toFixed(1)}%</span>
                     ${team.isComplete ? '<span class="btn-badge">Full</span>' : ''}
                   </button>
@@ -1493,12 +2923,8 @@ function renderAuction(app) {
               </div>
 
               <div class="auction-actions">
-                <button class="action-btn primary" onclick="closeBidding()"
-                  ${gameState.currentBid.teamIndex === null ? 'disabled' : ''}>
-                  Award to Winner
-                </button>
-                <button class="action-btn secondary" onclick="skipCard()">
-                  Skip Card
+                <button class="action-btn primary" onclick="endBidding()">
+                  ${gameState.currentBid.teamIndex !== null ? 'End Bidding & Award' : 'End Bidding (No Hire)'}
                 </button>
               </div>
             </div>
@@ -1595,10 +3021,7 @@ function renderMarketRound(app) {
             <div class="market-draw-section">
               <div class="draw-card-placeholder">
                 <span class="draw-icon">🎴</span>
-                <p>Before drawing the market card, teams can use their wildcard</p>
-                <button class="action-btn secondary large" onclick="startWildcardPhase()" style="margin-bottom: 12px;">
-                  🃏 Wildcard Decisions
-                </button>
+                <p>Draw a market condition card to see how the market affects your team</p>
                 <button class="action-btn primary large" onclick="drawMarketCard()">
                   Draw Market Card
                 </button>
@@ -1659,6 +3082,8 @@ function renderMarketRound(app) {
                   `).join('')}
                 </div>
               </div>
+
+              ${renderWildcardSection()}
 
               <div class="market-actions">
                 <button class="action-btn primary large" onclick="nextRound()">
@@ -1791,11 +3216,11 @@ function renderSecondaryHire(app) {
                   const hasHired = gameState.secondaryHired.includes(index);
                   const canBid = !team.isDisqualified && !hasHired && team.employees.length < 3;
                   return `
-                    <button class="bid-team-btn ${hasHired ? 'complete' : ''}"
+                    <button class="bid-team-btn ${hasHired ? 'complete' : ''} ${team.isBot ? 'is-bot' : ''}"
                             style="--team-color: ${team.color}"
                             onclick="openBidModal(${index})"
                             ${!canBid || team.esopRemaining <= gameState.currentBid.amount ? 'disabled' : ''}>
-                      <span class="btn-team-name">${team.name}</span>
+                      <span class="btn-team-name">${team.isBot ? '🤖 ' : ''}${team.name}</span>
                       <span class="btn-team-esop">${team.esopRemaining.toFixed(1)}%</span>
                       ${hasHired ? '<span class="btn-badge">Hired</span>' : ''}
                     </button>
@@ -1803,11 +3228,9 @@ function renderSecondaryHire(app) {
                 }).join('')}
               </div>
 
-              ${gameState.currentBid.teamIndex !== null ? `
-                <button class="action-btn primary" onclick="closeSecondaryBidding()">
-                  Award to Winner
-                </button>
-              ` : ''}
+              <button class="action-btn primary" onclick="endSecondaryBidding()">
+                ${gameState.currentBid.teamIndex !== null ? 'End Bidding & Award' : 'Skip This Candidate'}
+              </button>
             </div>
           ` : `
             <div class="select-prompt">
@@ -1820,11 +3243,13 @@ function renderSecondaryHire(app) {
   `;
 }
 
-// Render exit phase
+// Render exit phase - each team picks their own exit
 function renderExit(app) {
   const sortedTeams = [...gameState.teams]
     .filter(t => !t.isDisqualified)
     .sort((a, b) => b.valuation - a.valuation);
+
+  const allChosen = gameState.teams.every(t => t.isDisqualified || t.exitChoice);
 
   app.innerHTML = `
     <div class="game-container">
@@ -1833,58 +3258,97 @@ function renderExit(app) {
       <main class="exit-main">
         <div class="exit-header">
           <h1>Exit Round</h1>
-          <p>The moment of truth! Your exit type determines your final multiplier.</p>
+          <p>Each team chooses their exit strategy. Higher multipliers mean bigger rewards!</p>
         </div>
 
-        ${!gameState.exitCard ? `
-          <div class="exit-draw-section">
-            <div class="exit-draw-card">
-              <span class="exit-icon">🚀</span>
-              <p>Draw an exit card to determine your company's fate</p>
-              <button class="action-btn primary large" onclick="drawExitCard()">
-                Draw Exit Card
-              </button>
-            </div>
-
-            <div class="pre-exit-standings">
-              <h3>Current Standings</h3>
-              <div class="standings-list">
-                ${sortedTeams.map((team, idx) => `
-                  <div class="standing-entry" style="--team-color: ${team.color}">
-                    <span class="standing-rank">#${idx + 1}</span>
-                    <span class="standing-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
-                    <span class="standing-name">${team.name}</span>
-                    <span class="standing-value">${formatCurrency(team.valuation)}</span>
-                  </div>
-                `).join('')}
+        <div class="exit-options-info">
+          <h3>Available Exit Strategies</h3>
+          <div class="exit-options-grid">
+            ${exitCards.map(exit => `
+              <div class="exit-option-card">
+                <div class="exit-option-name">${exit.name}</div>
+                <div class="exit-option-multiplier">${exit.multiplier}x</div>
+                <p class="exit-option-desc">${exit.description}</p>
               </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="exit-teams-section">
+          <h3>Team Exit Choices</h3>
+          <div class="exit-teams-grid">
+            ${gameState.teams.map((team, idx) => {
+              if (team.isDisqualified) return '';
+
+              if (team.exitChoice) {
+                return `
+                  <div class="exit-team-card chosen" style="--team-color: ${team.color}">
+                    <div class="exit-team-header">
+                      <span class="exit-team-icon" style="background: ${team.color}">${team.isBot ? '🤖' : team.name.charAt(0)}</span>
+                      <span class="exit-team-name">${team.name}</span>
+                    </div>
+                    <div class="exit-team-choice">
+                      <div class="chosen-exit">${team.exitChoice.name}</div>
+                      <div class="chosen-multiplier">${team.exitChoice.multiplier}x</div>
+                    </div>
+                    <div class="exit-team-valuation">
+                      <span class="pre-exit">${formatCurrency(team.preExitValuation)}</span>
+                      <span class="arrow">→</span>
+                      <span class="post-exit">${formatCurrency(team.valuation)}</span>
+                    </div>
+                  </div>
+                `;
+              }
+
+              // Team hasn't chosen yet
+              return `
+                <div class="exit-team-card pending" style="--team-color: ${team.color}">
+                  <div class="exit-team-header">
+                    <span class="exit-team-icon" style="background: ${team.color}">${team.isBot ? '🤖' : team.name.charAt(0)}</span>
+                    <span class="exit-team-name">${team.name}</span>
+                  </div>
+                  <div class="exit-team-current">
+                    Current: ${formatCurrency(team.valuation)}
+                  </div>
+                  ${team.isBot ? `
+                    <div class="exit-team-waiting">🤖 Deciding...</div>
+                  ` : `
+                    <div class="exit-buttons">
+                      ${exitCards.map(exit => `
+                        <button class="exit-btn" onclick="chooseExit(${idx}, ${exit.id})">
+                          ${exit.name} (${exit.multiplier}x)
+                        </button>
+                      `).join('')}
+                    </div>
+                  `}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        ${allChosen ? `
+          <div class="final-standings">
+            <h3>Final Valuations</h3>
+            <div class="standings-list final">
+              ${sortedTeams.map((team, idx) => `
+                <div class="standing-entry ${idx === 0 ? 'winner' : ''}" style="--team-color: ${team.color}">
+                  <span class="standing-rank">#${idx + 1}</span>
+                  <span class="standing-icon" style="background: ${team.color}">${team.isBot ? '🤖' : team.name.charAt(0)}</span>
+                  <span class="standing-name">${team.name}</span>
+                  <span class="standing-exit">${team.exitChoice?.name || ''}</span>
+                  <span class="standing-value">${formatCurrency(team.valuation)}</span>
+                </div>
+              `).join('')}
             </div>
           </div>
+
+          <button class="action-btn primary large" onclick="declareWinner()">
+            Declare Winner
+          </button>
         ` : `
-          <div class="exit-result">
-            <div class="exit-card-reveal">
-              <div class="exit-type">${gameState.exitCard.name}</div>
-              <div class="exit-multiplier">${gameState.exitCard.multiplier}x</div>
-              <p class="exit-desc">${gameState.exitCard.description}</p>
-            </div>
-
-            <div class="final-standings">
-              <h3>Final Valuations</h3>
-              <div class="standings-list final">
-                ${sortedTeams.map((team, idx) => `
-                  <div class="standing-entry ${idx === 0 ? 'winner' : ''}" style="--team-color: ${team.color}">
-                    <span class="standing-rank">#${idx + 1}</span>
-                    <span class="standing-icon" style="background: ${team.color}">${team.name.charAt(0)}</span>
-                    <span class="standing-name">${team.name}</span>
-                    <span class="standing-value">${formatCurrency(team.valuation)}</span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-
-            <button class="action-btn primary large" onclick="declareWinner()">
-              Declare Winner
-            </button>
+          <div class="waiting-message">
+            <p>Waiting for all teams to choose their exit strategy...</p>
           </div>
         `}
       </main>

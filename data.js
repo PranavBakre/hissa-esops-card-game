@@ -425,7 +425,7 @@ const teamDefinitions = [
 // Iteration 3: Company Setup Cards
 // ==========================================
 
-// Market Segment Cards (6 total)
+// Market Segment Cards (12 total - doubled for setup draft)
 const segmentCards = [
   {
     id: 1,
@@ -462,10 +462,47 @@ const segmentCards = [
     name: "Logistics",
     description: "Supply chain and delivery solutions",
     icon: "🚚"
+  },
+  // Duplicate set for larger deck
+  {
+    id: 7,
+    name: "B2B SaaS",
+    description: "Enterprise software solutions for businesses",
+    icon: "🏢"
+  },
+  {
+    id: 8,
+    name: "D2C Consumer",
+    description: "Direct-to-consumer products and brands",
+    icon: "🛒"
+  },
+  {
+    id: 9,
+    name: "Fintech",
+    description: "Financial technology and payments",
+    icon: "💳"
+  },
+  {
+    id: 10,
+    name: "Healthtech",
+    description: "Healthcare technology and wellness",
+    icon: "🏥"
+  },
+  {
+    id: 11,
+    name: "Edtech",
+    description: "Education technology and learning platforms",
+    icon: "📚"
+  },
+  {
+    id: 12,
+    name: "Logistics",
+    description: "Supply chain and delivery solutions",
+    icon: "🚚"
   }
 ];
 
-// Product Cards (8 total)
+// Product Cards (16 total - doubled for setup draft)
 const productCards = [
   {
     id: 1,
@@ -522,10 +559,67 @@ const productCards = [
     name: "Mobile App",
     description: "Consumer-facing mobile application",
     icon: "📱"
+  },
+  // New product cards
+  {
+    id: 9,
+    type: "product",
+    name: "IoT Platform",
+    description: "Connected device management and monitoring",
+    icon: "📡"
+  },
+  {
+    id: 10,
+    type: "product",
+    name: "Collaboration Tool",
+    description: "Team communication and project management",
+    icon: "💬"
+  },
+  {
+    id: 11,
+    type: "product",
+    name: "E-commerce Engine",
+    description: "Online store and checkout infrastructure",
+    icon: "🛍️"
+  },
+  {
+    id: 12,
+    type: "product",
+    name: "Cloud Infrastructure",
+    description: "Scalable compute and storage services",
+    icon: "☁️"
+  },
+  {
+    id: 13,
+    type: "product",
+    name: "Subscription Box",
+    description: "Curated recurring product delivery",
+    icon: "📦"
+  },
+  {
+    id: 14,
+    type: "product",
+    name: "Developer Tools",
+    description: "APIs and SDKs for builders",
+    icon: "🔧"
+  },
+  {
+    id: 15,
+    type: "product",
+    name: "Video Platform",
+    description: "Streaming and video conferencing",
+    icon: "🎬"
+  },
+  {
+    id: 16,
+    type: "product",
+    name: "Booking System",
+    description: "Appointments and reservations management",
+    icon: "📅"
   }
 ];
 
-// Service Cards (8 total)
+// Service Cards (16 total - doubled for setup draft)
 const serviceCards = [
   {
     id: 1,
@@ -582,6 +676,63 @@ const serviceCards = [
     name: "On-Demand Service",
     description: "Gig economy platform",
     icon: "⚡"
+  },
+  // New service cards
+  {
+    id: 9,
+    type: "service",
+    name: "Insurance Services",
+    description: "Risk management and coverage",
+    icon: "🛡️"
+  },
+  {
+    id: 10,
+    type: "service",
+    name: "Legal Services",
+    description: "Compliance and contract management",
+    icon: "⚖️"
+  },
+  {
+    id: 11,
+    type: "service",
+    name: "Customer Support",
+    description: "Help desk and customer success",
+    icon: "🎧"
+  },
+  {
+    id: 12,
+    type: "service",
+    name: "Data Services",
+    description: "Data processing and enrichment",
+    icon: "🗄️"
+  },
+  {
+    id: 13,
+    type: "service",
+    name: "Healthcare Services",
+    description: "Telemedicine and wellness programs",
+    icon: "🏥"
+  },
+  {
+    id: 14,
+    type: "service",
+    name: "Financial Advisory",
+    description: "Investment and tax planning",
+    icon: "💹"
+  },
+  {
+    id: 15,
+    type: "service",
+    name: "Marketing Agency",
+    description: "Brand building and growth hacking",
+    icon: "📣"
+  },
+  {
+    id: 16,
+    type: "service",
+    name: "Facility Management",
+    description: "Property and maintenance services",
+    icon: "🏗️"
   }
 ];
 
@@ -702,4 +853,72 @@ function getSetupBonus(segmentName, ideaName) {
   return setupBonuses.find(
     b => b.segment === segmentName && b.idea === ideaName
   ) || null;
+}
+
+// ==========================================
+// Iteration 6: Bot Teams Data
+// ==========================================
+
+// Bot problem statements - randomly assigned to bot teams
+const botProblemStatements = [
+  "AI-powered meal planning for busy families",
+  "Blockchain-based credential verification for hiring",
+  "Sustainable packaging marketplace for SMBs",
+  "Remote team culture building platform",
+  "Hyperlocal delivery network for pharmacies",
+  "Mental health support app for college students",
+  "Carbon footprint tracking for e-commerce",
+  "Micro-learning platform for blue-collar workers",
+  "Peer-to-peer equipment rental for construction",
+  "Smart inventory management for kiranas",
+  "Vernacular content creation tools for creators",
+  "Electric vehicle charging station finder",
+  "Gig worker benefits and insurance platform",
+  "Farm-to-table marketplace for urban consumers",
+  "Virtual events platform for regional businesses"
+];
+
+// Bot name word pools - combined to create unique 3-word names
+const botNameAdjectives = [
+  "Crimson", "Azure", "Golden", "Emerald", "Silver",
+  "Cosmic", "Lunar", "Solar", "Stellar", "Quantum",
+  "Swift", "Bold", "Bright", "Keen", "Prime"
+];
+
+const botNameNouns = [
+  "Phoenix", "Falcon", "Tiger", "Dragon", "Wolf",
+  "Spark", "Storm", "Wave", "Flux", "Pulse",
+  "Nova", "Orbit", "Nexus", "Apex", "Core"
+];
+
+const botNameSuffixes = [
+  "Labs", "Tech", "AI", "Systems", "Ventures",
+  "Works", "Hub", "Studio", "Co", "Inc"
+];
+
+// Generate a unique bot name
+function generateBotName(usedNames = []) {
+  let attempts = 0;
+  while (attempts < 50) {
+    const adj = botNameAdjectives[Math.floor(Math.random() * botNameAdjectives.length)];
+    const noun = botNameNouns[Math.floor(Math.random() * botNameNouns.length)];
+    const suffix = botNameSuffixes[Math.floor(Math.random() * botNameSuffixes.length)];
+    const name = `${adj} ${noun} ${suffix}`;
+
+    if (!usedNames.includes(name)) {
+      return name;
+    }
+    attempts++;
+  }
+  // Fallback with random number
+  return `Bot Team ${Math.floor(Math.random() * 1000)}`;
+}
+
+// Get a random unused problem statement
+function getRandomBotProblemStatement(usedStatements = []) {
+  const available = botProblemStatements.filter(s => !usedStatements.includes(s));
+  if (available.length === 0) {
+    return botProblemStatements[Math.floor(Math.random() * botProblemStatements.length)];
+  }
+  return available[Math.floor(Math.random() * available.length)];
 }
