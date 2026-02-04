@@ -1288,6 +1288,13 @@ function resetGame() {
   initGame();
 }
 
+// Confirm restart with user
+function confirmRestart() {
+  if (confirm('Are you sure you want to restart? All progress will be lost.')) {
+    resetGame();
+  }
+}
+
 // Show toast notification
 function showToast(message, type = 'info') {
   const toast = document.createElement('div');
@@ -2520,9 +2527,14 @@ function renderRegistration(app) {
   app.innerHTML = `
     <div class="game-container">
       <header class="game-header">
-        <div class="logo">
-          <span class="logo-icon">💼</span>
-          <h1>ESOP Wars</h1>
+        <div class="header-top">
+          <div class="logo">
+            <span class="logo-icon">💼</span>
+            <h1>ESOP Wars</h1>
+          </div>
+          <button class="restart-btn" onclick="confirmRestart()" title="Restart Game">
+            🔄 <span>Restart</span>
+          </button>
         </div>
         <p class="tagline">Bid equity to build your startup team, survive market swings, exit rich.</p>
       </header>
@@ -2729,20 +2741,25 @@ function renderPhaseBar(activePhase) {
   ` : '';
 
   return `
-    ${spectatorBadge}
-    <nav class="phase-nav">
-      ${phases.map((phase, idx) => {
-        let status = '';
-        if (idx < activeIndex) status = 'done';
-        else if (idx === activeIndex) status = 'active';
-        return `
-          <div class="phase-item ${status}">
-            <span class="phase-icon">${phase.icon}</span>
-            <span class="phase-label">${phase.label}</span>
-          </div>
-        `;
-      }).join('')}
-    </nav>
+    <div class="phase-bar-container">
+      ${spectatorBadge}
+      <nav class="phase-nav">
+        ${phases.map((phase, idx) => {
+          let status = '';
+          if (idx < activeIndex) status = 'done';
+          else if (idx === activeIndex) status = 'active';
+          return `
+            <div class="phase-item ${status}">
+              <span class="phase-icon">${phase.icon}</span>
+              <span class="phase-label">${phase.label}</span>
+            </div>
+          `;
+        }).join('')}
+      </nav>
+      <button class="restart-btn" onclick="confirmRestart()" title="Restart Game">
+        🔄 <span>Restart</span>
+      </button>
+    </div>
   `;
 }
 

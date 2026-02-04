@@ -118,6 +118,61 @@ body {
   color: #000;
 }
 
+.phase-bar-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  padding-right: 16px;
+}
+
+.phase-bar-container .phase-nav {
+  border-bottom: none;
+  flex: 1;
+}
+
+.restart-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.restart-btn:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: white;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.header-top .logo {
+  margin-bottom: 0;
+}
+
+.header-top .restart-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 /* ==================== */
 /* Teams Sidebar */
 /* ==================== */
@@ -1316,6 +1371,28 @@ body {
 @media (max-width: 500px) {
   .modifiers-grid {
     grid-template-columns: 1fr;
+  }
+
+  .restart-btn span {
+    display: none;
+  }
+
+  .restart-btn {
+    padding: 8px 12px;
+  }
+
+  .phase-bar-container {
+    padding-right: 8px;
+  }
+
+  .header-top .restart-btn {
+    position: static;
+    transform: none;
+    margin-left: auto;
+  }
+
+  .header-top {
+    padding: 0 16px;
   }
 }
 

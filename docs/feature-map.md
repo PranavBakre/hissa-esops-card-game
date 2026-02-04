@@ -4,7 +4,7 @@ Quick reference for all features, their functions, and iteration history.
 
 ---
 
-<!-- @feature Registration @iteration 1 { -->
+<!-- @feature Registration @iteration 1,7 { -->
 ## Registration
 
 Teams enter names and problem statements before starting the game.
@@ -15,9 +15,10 @@ Teams enter names and problem statements before starting the game.
 | `openRegistrationModal(teamIndex)` | Open modal for team registration |
 | `closeRegistrationModal()` | Close registration modal |
 | `saveRegistration()` | Save team name and problem statement |
-| `renderRegistration(app)` | Render registration phase UI |
+| `renderRegistration(app)` | Render registration phase UI with restart button |
 
 ### Iterations
+- **Iteration 7**: Added restart button to registration header
 - **Iteration 1**: Initial implementation
 
 <!-- } @feature-end Registration -->
@@ -255,7 +256,7 @@ Two winners: Best Founder (highest valuation) and Best Employer (highest employe
 
 ---
 
-<!-- @feature Utilities @iteration 1,3,4,5 { -->
+<!-- @feature Utilities @iteration 1,3,4,5,7 { -->
 ## Utilities
 
 Helper functions used across features.
@@ -270,17 +271,18 @@ Helper functions used across features.
 | `showToast(message, type)` | Show notification |
 | `formatCurrency(value)` | Format as ₹XXM/B |
 | `render()` | Main render dispatcher |
-| `renderPhaseBar(activePhase)` | Render phase navigation |
+| `renderPhaseBar(activePhase)` | Render phase navigation with restart button |
 | `renderTeamsSidebar()` | Render teams sidebar |
 | `viewTeamDetails(teamIndex)` | Open team detail modal |
 | `closeTeamDetailModal()` | Close team detail modal |
 | `resetGame()` | Clear state and restart |
+| `confirmRestart()` | Show confirmation dialog before restart |
 
 ### Iterations
+- **Iteration 7**: Added restart button accessible from any phase (in phase bar and registration header) with confirmation dialog
 - **Iteration 5**: Added market leader count display in sidebar
 - **Iteration 4**: Added perks display in teams sidebar
-- **Iteration 3**: Added setup phase to phase bar navigation
 
-*Earlier: Iteration 1 - Base utilities (init, shuffle, save/load, render)*
+*Earlier: Iteration 1 - Base utilities (init, shuffle, save/load, render) → Iteration 3 - Added setup phase to phase bar*
 
 <!-- } @feature-end Utilities -->
