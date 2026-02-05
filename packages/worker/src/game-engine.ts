@@ -243,12 +243,22 @@ export function advancePhase(state: GameState): GameState {
 function initSetupPhase(state: GameState): GameState {
   const newState = deepClone(state);
 
-  // Deal initial hands (3 cards each: 2 segments, 1 idea)
-  newState.teams.forEach((team) => {
-    const segments = newState.segmentDeck.splice(0, 2);
-    const ideas = newState.ideaDeck.splice(0, 1);
-    team.setupHand = [...segments, ...ideas];
+  // Deal initial hands (5 cards each: 1 segment, 4 ideas)
+  // Players will drop/draw to finalize, then pick 1 segment + 1 idea to lock
+  newState.teams.forEach((team, idx) => {
+    const segment = newState.segmentDeck[idx];
+    const ideas = [
+      newState.ideaDeck[idx * 4],
+      newState.ideaDeck[idx * 4 + 1],
+      newState.ideaDeck[idx * 4 + 2],
+      newState.ideaDeck[idx * 4 + 3],
+    ].filter(Boolean);
+    team.setupHand = segment ? [segment, ...ideas] : [...ideas];
   });
+
+  // Remove dealt cards from decks
+  newState.segmentDeck = newState.segmentDeck.slice(newState.teams.length);
+  newState.ideaDeck = newState.ideaDeck.slice(newState.teams.length * 4);
 
   newState.setupRound = 1;
   newState.setupPhase = 'drop';

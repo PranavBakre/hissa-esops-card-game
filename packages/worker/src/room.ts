@@ -1149,10 +1149,9 @@ export class GameRoom {
           type: 'game-state',
           state: this.roomState.gameState,
         });
-
-        // Schedule draw phase
-        this.scheduleAlarm(getBotDelay());
       }
+      // Always schedule draw phase (even if no drop happened)
+      this.scheduleAlarm(getBotDelay());
     } else if (this.roomState.gameState.setupPhase === 'draw') {
       const decision = decideSetupDraw(this.roomState.gameState, currentTurn);
 
@@ -1202,11 +1201,13 @@ export class GameRoom {
       });
 
       this.checkPhaseCompletion();
+    }
+    // If decision is null, bot can't lock (missing cards) - same as V1 behavior
+    // But we still need to try the next bot
 
-      // Schedule next bot lock if needed
-      if (this.roomState.gameState.phase === 'setup-lock') {
-        this.scheduleBotLocks();
-      }
+    // Schedule next bot lock if still in setup-lock phase
+    if (this.roomState.gameState.phase === 'setup-lock') {
+      this.scheduleBotLocks();
     }
   }
 
