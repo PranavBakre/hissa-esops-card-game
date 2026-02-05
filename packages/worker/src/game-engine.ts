@@ -160,7 +160,7 @@ export function isPhaseComplete(state: GameState): boolean {
       return true; // Manual advance
 
     case 'auction':
-      return state.teams.every((t) => t.employees.length >= GAME.EMPLOYEES_PER_TEAM || t.isDisqualified);
+      return state.teams.every((t) => t.employees.length >= GAME.EMPLOYEES_PER_TEAM);
 
     case 'auction-summary':
       return true; // Manual advance
@@ -260,7 +260,7 @@ function initSetupPhase(state: GameState): GameState {
   newState.segmentDeck = newState.segmentDeck.slice(newState.teams.length);
   newState.ideaDeck = newState.ideaDeck.slice(newState.teams.length * 4);
 
-  newState.setupRound = 1;
+  newState.setupRound = 0;
   newState.setupPhase = 'drop';
   newState.setupDraftTurn = 0;
 
@@ -330,8 +330,8 @@ function advanceSetupTurn(state: GameState): GameState {
   if (newState.setupDraftTurn === 0) {
     newState.setupRound++;
 
-    // Check if all setup rounds are complete
-    if (newState.setupRound > GAME.SETUP_ROUNDS) {
+    // Check if all setup rounds are complete (rounds 0, 1, 2 = 3 rounds)
+    if (newState.setupRound >= GAME.SETUP_ROUNDS) {
       // Move to setup-lock phase
       newState.phase = 'setup-lock';
       return newState;
@@ -431,14 +431,16 @@ export function closeBidding(state: GameState): GameState {
 
   // Check if auction is complete
   const allComplete = newState.teams.every(
-    (t) => t.employees.length >= GAME.EMPLOYEES_PER_TEAM || t.isDisqualified
+    (t) => t.employees.length >= GAME.EMPLOYEES_PER_TEAM
   );
 
   if (allComplete || newState.currentCardIndex >= newState.employeeDeck.length) {
-    // Disqualify incomplete teams
+    // Apply $1M penalty per missing employee (V1 behavior - no disqualification)
     newState.teams.forEach((team) => {
-      if (team.employees.length < GAME.EMPLOYEES_PER_TEAM) {
-        team.isDisqualified = true;
+      const missingEmployees = GAME.EMPLOYEES_PER_TEAM - team.employees.length;
+      if (missingEmployees > 0) {
+        const penalty = missingEmployees * 1_000_000;
+        team.valuation = Math.max(0, team.valuation - penalty);
       }
     });
     newState.phase = 'auction-summary';
@@ -456,9 +458,12 @@ export function skipCard(state: GameState): GameState {
 
   // Check if auction is complete
   if (newState.currentCardIndex >= newState.employeeDeck.length) {
+    // Apply $1M penalty per missing employee (V1 behavior - no disqualification)
     newState.teams.forEach((team) => {
-      if (team.employees.length < GAME.EMPLOYEES_PER_TEAM) {
-        team.isDisqualified = true;
+      const missingEmployees = GAME.EMPLOYEES_PER_TEAM - team.employees.length;
+      if (missingEmployees > 0) {
+        const penalty = missingEmployees * 1_000_000;
+        team.valuation = Math.max(0, team.valuation - penalty);
       }
     });
     newState.phase = 'auction-summary';

@@ -17,6 +17,7 @@ import {
   skipDraw,
   lockSetup,
   placeBid,
+  passBid,
   advancePhase,
   selectWildcard,
   drawMarket,
@@ -664,18 +665,21 @@ function renderAuction(): string {
 
       ${canBid ? `
         <div class="bid-controls">
+          <div class="bid-increment-buttons">
+            <button class="btn btn-secondary" id="bid-inc-05">+0.5%</button>
+            <button class="btn btn-secondary" id="bid-inc-1">+1%</button>
+            <button class="btn btn-secondary" id="bid-inc-2">+2%</button>
+          </div>
           <div class="bid-input-group">
-            <button class="btn btn-secondary" id="bid-decrease">-</button>
-            <input type="number" id="bid-amount" value="${minBid}" min="${minBid}" max="${myTeam.esopRemaining}">
-            <button class="btn btn-secondary" id="bid-increase">+</button>
+            <input type="number" id="bid-amount" value="${minBid}" min="${minBid}" max="${myTeam.esopRemaining}" step="0.5">
+            <span class="bid-suffix">%</span>
           </div>
           <div class="bid-buttons">
-            <button class="btn btn-primary" id="place-bid-btn">
-              Place Bid
-            </button>
+            <button class="btn btn-primary" id="place-bid-btn">Place Bid</button>
+            <button class="btn btn-secondary" id="pass-bid-btn">Pass</button>
           </div>
           <div class="esop-remaining">
-            Your ESOP: ${myTeam.esopRemaining}% remaining
+            Your ESOP: ${myTeam.esopRemaining.toFixed(1)}% remaining
           </div>
         </div>
       ` : myTeam ? `
@@ -970,18 +974,21 @@ function renderSecondaryHire(): string {
 
       ${canBid ? `
         <div class="bid-controls">
+          <div class="bid-increment-buttons">
+            <button class="btn btn-secondary" id="bid-inc-05">+0.5%</button>
+            <button class="btn btn-secondary" id="bid-inc-1">+1%</button>
+            <button class="btn btn-secondary" id="bid-inc-2">+2%</button>
+          </div>
           <div class="bid-input-group">
-            <button class="btn btn-secondary" id="bid-decrease">-</button>
-            <input type="number" id="bid-amount" value="${minBid}" min="${minBid}" max="${myTeam.esopRemaining}">
-            <button class="btn btn-secondary" id="bid-increase">+</button>
+            <input type="number" id="bid-amount" value="${minBid}" min="${minBid}" max="${myTeam.esopRemaining}" step="0.5">
+            <span class="bid-suffix">%</span>
           </div>
           <div class="bid-buttons">
-            <button class="btn btn-primary" id="place-bid-btn">
-              Place Bid
-            </button>
+            <button class="btn btn-primary" id="place-bid-btn">Place Bid</button>
+            <button class="btn btn-secondary" id="pass-bid-btn">Pass</button>
           </div>
           <div class="esop-remaining">
-            Your ESOP: ${myTeam.esopRemaining}% remaining
+            Your ESOP: ${myTeam.esopRemaining.toFixed(1)}% remaining
           </div>
         </div>
       ` : '<p>You cannot bid in this round.</p>'}
@@ -1243,30 +1250,30 @@ function attachAuctionListeners(): void {
   const bidInput = getInputById('bid-amount');
   if (!bidInput) return;
 
-  // Increment button
-  document.getElementById('bid-increase')?.addEventListener('click', () => {
-    const current = parseInt(bidInput.value, 10) || 0;
-    const max = parseInt(bidInput.max, 10) || 100;
-    if (current < max) {
-      bidInput.value = String(current + 1);
-    }
-  });
+  const adjustBid = (increment: number): void => {
+    const current = parseFloat(bidInput.value) || 0;
+    const max = parseFloat(bidInput.max) || 100;
+    const min = parseFloat(bidInput.min) || 0.5;
+    const newValue = Math.round((current + increment) * 10) / 10;
+    bidInput.value = String(Math.max(min, Math.min(max, newValue)));
+  };
 
-  // Decrement button
-  document.getElementById('bid-decrease')?.addEventListener('click', () => {
-    const current = parseInt(bidInput.value, 10) || 0;
-    const min = parseInt(bidInput.min, 10) || 1;
-    if (current > min) {
-      bidInput.value = String(current - 1);
-    }
-  });
+  // Increment buttons
+  document.getElementById('bid-inc-05')?.addEventListener('click', () => adjustBid(0.5));
+  document.getElementById('bid-inc-1')?.addEventListener('click', () => adjustBid(1));
+  document.getElementById('bid-inc-2')?.addEventListener('click', () => adjustBid(2));
 
   // Place bid button
   document.getElementById('place-bid-btn')?.addEventListener('click', () => {
-    const amount = parseInt(bidInput.value, 10);
+    const amount = parseFloat(bidInput.value);
     if (!isNaN(amount) && amount > 0) {
       placeBid(amount);
     }
+  });
+
+  // Pass button
+  document.getElementById('pass-bid-btn')?.addEventListener('click', () => {
+    passBid();
   });
 
   // Enter key on input

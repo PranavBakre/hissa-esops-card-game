@@ -439,19 +439,27 @@ export const exitCards: ExitCard[] = [
 // ===========================================
 
 export const segmentCards: SegmentCard[] = [
+  // Original 6 segments
   { id: 1, name: 'B2B SaaS', description: 'Enterprise software solutions for businesses', icon: '' },
   { id: 2, name: 'D2C Consumer', description: 'Direct-to-consumer products and brands', icon: '' },
   { id: 3, name: 'Fintech', description: 'Financial technology and payments', icon: '' },
   { id: 4, name: 'Healthtech', description: 'Healthcare technology and wellness', icon: '' },
   { id: 5, name: 'Edtech', description: 'Education technology and learning platforms', icon: '' },
   { id: 6, name: 'Logistics', description: 'Supply chain and delivery solutions', icon: '' },
-  // Duplicates for larger deck
+  // Second set
   { id: 7, name: 'B2B SaaS', description: 'Enterprise software solutions for businesses', icon: '' },
   { id: 8, name: 'D2C Consumer', description: 'Direct-to-consumer products and brands', icon: '' },
   { id: 9, name: 'Fintech', description: 'Financial technology and payments', icon: '' },
   { id: 10, name: 'Healthtech', description: 'Healthcare technology and wellness', icon: '' },
   { id: 11, name: 'Edtech', description: 'Education technology and learning platforms', icon: '' },
   { id: 12, name: 'Logistics', description: 'Supply chain and delivery solutions', icon: '' },
+  // Third set - ensures enough for all teams to draw
+  { id: 13, name: 'B2B SaaS', description: 'Enterprise software solutions for businesses', icon: '' },
+  { id: 14, name: 'D2C Consumer', description: 'Direct-to-consumer products and brands', icon: '' },
+  { id: 15, name: 'Fintech', description: 'Financial technology and payments', icon: '' },
+  { id: 16, name: 'Healthtech', description: 'Healthcare technology and wellness', icon: '' },
+  { id: 17, name: 'Edtech', description: 'Education technology and learning platforms', icon: '' },
+  { id: 18, name: 'Logistics', description: 'Supply chain and delivery solutions', icon: '' },
 ];
 
 // ===========================================
