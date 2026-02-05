@@ -357,3 +357,29 @@ export function leaveRoom(): void {
 
   render();
 }
+
+// Setup Phase Actions
+export function dropCard(cardId: number, isSegment: boolean): void {
+  send({ type: 'drop-card', cardId, isSegment });
+}
+
+export function drawCard(deckType: 'segment' | 'idea'): void {
+  send({ type: 'draw-card', deckType });
+}
+
+export function skipDraw(): void {
+  send({ type: 'skip-draw' });
+}
+
+export function lockSetup(segmentId: number, ideaId: number): void {
+  send({ type: 'lock-setup', segmentId, ideaId });
+}
+
+// Auction Phase Actions
+export function placeBid(amount: number): void {
+  send({ type: 'place-bid', amount });
+}
+
+export function passBid(): void {
+  send({ type: 'pass-bid' });
+}

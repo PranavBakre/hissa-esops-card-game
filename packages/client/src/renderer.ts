@@ -12,6 +12,11 @@ import {
   startGame,
   registerTeam,
   leaveRoom,
+  dropCard,
+  drawCard,
+  skipDraw,
+  lockSetup,
+  placeBid,
 } from './app';
 
 // ===========================================
@@ -222,9 +227,17 @@ function renderGame(app: HTMLElement): void {
       content = renderRegistration();
       break;
     case 'setup':
+      content = renderSetupPhase();
+      break;
     case 'setup-lock':
+      content = renderSetupLock();
+      break;
     case 'setup-summary':
+      content = renderSetupSummary();
+      break;
     case 'auction':
+      content = renderAuction();
+      break;
     case 'auction-summary':
     case 'seed':
     case 'early':
@@ -385,6 +398,277 @@ function renderRegistration(): string {
 }
 
 // ===========================================
+// Setup Phase
+// ===========================================
+
+function renderSetupPhase(): string {
+  if (!state.gameState) return '';
+
+  const isMyTurn = state.myTeamIndex === state.gameState.setupDraftTurn;
+  const currentTeam = state.gameState.teams[state.gameState.setupDraftTurn];
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+
+  const setupPhase = state.gameState.setupPhase;
+  const round = state.gameState.setupRound;
+
+  return `
+    <div class="setup-phase">
+      <h2>Setup Drafting - Round ${round}/3</h2>
+      <p class="phase-description">Build your startup's identity</p>
+
+      <div class="turn-indicator ${isMyTurn ? 'your-turn' : ''}">
+        ${isMyTurn
+          ? `<strong>Your turn!</strong> ${setupPhase === 'drop' ? 'Drop a card' : 'Draw or skip'}`
+          : `Waiting for ${currentTeam.name}...`
+        }
+      </div>
+
+      ${myTeam ? `
+        <div class="setup-hand">
+          <h3>Your Hand</h3>
+          <div class="card-grid">
+            ${myTeam.setupHand.map((card) => {
+              const isSegment = !('type' in card);
+              const canDrop = isMyTurn && setupPhase === 'drop';
+              return `
+                <div class="setup-card ${isSegment ? 'segment' : 'idea'} ${canDrop ? 'clickable' : ''}"
+                     data-card-id="${card.id}" data-is-segment="${isSegment}">
+                  <div class="card-type">${isSegment ? 'Segment' : card.type}</div>
+                  <div class="card-name">${card.name}</div>
+                  <div class="card-desc">${card.description}</div>
+                  ${canDrop ? '<div class="card-action">Click to drop</div>' : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        ${isMyTurn && setupPhase === 'draw' ? `
+          <div class="draw-options">
+            <h3>Draw a Card</h3>
+            <div class="draw-buttons">
+              <button class="btn btn-secondary" id="draw-segment-btn"
+                ${state.gameState.segmentDeck.length === 0 ? 'disabled' : ''}>
+                Draw Segment (${state.gameState.segmentDeck.length} left)
+              </button>
+              <button class="btn btn-secondary" id="draw-idea-btn"
+                ${state.gameState.ideaDeck.length === 0 ? 'disabled' : ''}>
+                Draw Idea (${state.gameState.ideaDeck.length} left)
+              </button>
+              <button class="btn btn-text" id="skip-draw-btn">
+                Skip Draw
+              </button>
+            </div>
+          </div>
+        ` : ''}
+      ` : '<p>You are spectating.</p>'}
+    </div>
+  `;
+}
+
+function renderSetupLock(): string {
+  if (!state.gameState) return '';
+
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+  const isLocked = myTeam && myTeam.lockedSegment !== null;
+
+  const segments = myTeam?.setupHand.filter((c) => !('type' in c)) ?? [];
+  const ideas = myTeam?.setupHand.filter((c) => 'type' in c) ?? [];
+
+  return `
+    <div class="setup-lock-phase">
+      <h2>Lock Your Selection</h2>
+      <p class="phase-description">Choose your final segment and idea combination</p>
+
+      ${myTeam && !isLocked ? `
+        <div class="lock-selection">
+          <div class="selection-group">
+            <h3>Select Segment</h3>
+            <div class="card-grid">
+              ${segments.map((card) => `
+                <div class="setup-card segment selectable" data-segment-id="${card.id}">
+                  <div class="card-type">Segment</div>
+                  <div class="card-name">${card.name}</div>
+                  <div class="card-desc">${card.description}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="selection-group">
+            <h3>Select Idea</h3>
+            <div class="card-grid">
+              ${ideas.map((card) => `
+                <div class="setup-card idea selectable" data-idea-id="${card.id}">
+                  <div class="card-type">${card.type}</div>
+                  <div class="card-name">${card.name}</div>
+                  <div class="card-desc">${card.description}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-large" id="lock-btn" disabled>
+            Lock Selection
+          </button>
+        </div>
+      ` : myTeam && isLocked ? `
+        <div class="lock-complete">
+          <h3>Selection Locked!</h3>
+          <div class="locked-cards">
+            <div class="setup-card segment locked">
+              <div class="card-type">Segment</div>
+              <div class="card-name">${myTeam.lockedSegment?.name}</div>
+            </div>
+            <div class="setup-card idea locked">
+              <div class="card-type">${myTeam.lockedIdea?.type}</div>
+              <div class="card-name">${myTeam.lockedIdea?.name}</div>
+            </div>
+          </div>
+          ${myTeam.setupBonus ? `
+            <div class="bonus-display">
+              Bonus: +${(myTeam.setupBonus.bonus.modifier * 100).toFixed(0)}% ${myTeam.setupBonus.bonus.category}
+            </div>
+          ` : ''}
+        </div>
+      ` : '<p>You are spectating.</p>'}
+
+      <div class="teams-progress">
+        <h3>Team Progress</h3>
+        ${state.gameState.teams.map((team) => `
+          <div class="team-progress-item ${team.lockedSegment ? 'locked' : 'pending'}">
+            <span class="team-dot" style="background: ${team.color}"></span>
+            <span>${team.name}</span>
+            <span class="status">${team.lockedSegment ? 'Locked' : 'Selecting...'}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderSetupSummary(): string {
+  if (!state.gameState) return '';
+
+  return `
+    <div class="setup-summary">
+      <h2>Setup Complete</h2>
+      <p class="phase-description">Review all team selections before the auction</p>
+
+      <div class="summary-grid">
+        ${state.gameState.teams.map((team) => `
+          <div class="team-summary" style="--team-color: ${team.color}">
+            <div class="team-header">${team.name}</div>
+            <div class="team-problem">${team.problemStatement}</div>
+            <div class="team-setup">
+              <div class="segment-badge">${team.lockedSegment?.name ?? 'None'}</div>
+              <div class="idea-badge">${team.lockedIdea?.name ?? 'None'}</div>
+            </div>
+            ${team.setupBonus ? `
+              <div class="bonus-badge">
+                +${(team.setupBonus.bonus.modifier * 100).toFixed(0)}% ${team.setupBonus.bonus.category}
+              </div>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+
+      <p class="summary-note">The auction will begin shortly...</p>
+    </div>
+  `;
+}
+
+// ===========================================
+// Auction Phase
+// ===========================================
+
+function renderAuction(): string {
+  if (!state.gameState) return '';
+
+  const currentCard = state.gameState.employeeDeck[state.gameState.currentCardIndex];
+  const currentBid = state.gameState.currentBid;
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+
+  if (!currentCard) {
+    return '<div class="auction-complete">Auction complete!</div>';
+  }
+
+  const canBid = myTeam &&
+    !myTeam.isDisqualified &&
+    myTeam.employees.length < 3 &&
+    myTeam.esopRemaining > 0;
+
+  const minBid = currentBid ? currentBid.amount + 1 : 1;
+
+  return `
+    <div class="auction-phase">
+      <h2>Employee Auction</h2>
+      <p class="phase-description">Bid ESOP to hire employees for your team</p>
+
+      <div class="auction-card">
+        <div class="employee-card">
+          <div class="employee-category">${currentCard.category}</div>
+          <div class="employee-name">${currentCard.name}</div>
+          <div class="employee-role">${currentCard.role}</div>
+          <div class="employee-stats">
+            <div class="stat">
+              <span class="stat-label">Hard Skill</span>
+              <span class="stat-value">${(currentCard.hardSkill * 100).toFixed(0)}%</span>
+            </div>
+            <div class="soft-skills">
+              ${Object.entries(currentCard.softSkills).map(([skill, value]) => `
+                <div class="soft-skill">
+                  <span>${skill}</span>
+                  <span>${(value * 100).toFixed(0)}%</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bid-status">
+        ${currentBid ? `
+          <div class="current-bid">
+            <span>Current Bid:</span>
+            <strong>${currentBid.amount}% ESOP</strong>
+            <span>by ${state.gameState.teams[currentBid.teamIndex].name}</span>
+          </div>
+        ` : `
+          <div class="no-bid">No bids yet</div>
+        `}
+      </div>
+
+      ${canBid ? `
+        <div class="bid-controls">
+          <div class="bid-input-group">
+            <button class="btn btn-secondary" id="bid-decrease">-</button>
+            <input type="number" id="bid-amount" value="${minBid}" min="${minBid}" max="${myTeam.esopRemaining}">
+            <button class="btn btn-secondary" id="bid-increase">+</button>
+          </div>
+          <div class="bid-buttons">
+            <button class="btn btn-primary" id="place-bid-btn">
+              Place Bid
+            </button>
+          </div>
+          <div class="esop-remaining">
+            Your ESOP: ${myTeam.esopRemaining}% remaining
+          </div>
+        </div>
+      ` : myTeam ? `
+        <div class="cannot-bid">
+          ${myTeam.employees.length >= 3 ? 'You have hired 3 employees' : 'No ESOP remaining'}
+        </div>
+      ` : '<p>You are spectating.</p>'}
+
+      <div class="auction-progress">
+        Card ${state.gameState.currentCardIndex + 1} of ${state.gameState.employeeDeck.length}
+      </div>
+    </div>
+  `;
+}
+
+// ===========================================
 // Placeholder for other phases
 // ===========================================
 
@@ -392,7 +676,7 @@ function renderPlaceholder(phase: Phase): string {
   return `
     <div class="phase-placeholder">
       <h2>${PHASE_LABELS[phase] || phase}</h2>
-      <p>This phase will be implemented in Phase 3+</p>
+      <p>This phase will be implemented in Phase 4</p>
     </div>
   `;
 }
@@ -402,18 +686,147 @@ function renderPlaceholder(phase: Phase): string {
 // ===========================================
 
 function attachPhaseEventListeners(phase: Phase): void {
-  if (phase === 'registration') {
-    const form = document.getElementById('registration-form');
-    form?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const nameInput = getInputById('team-name');
-      const problemInput = getTextAreaById('problem-statement');
+  switch (phase) {
+    case 'registration':
+      attachRegistrationListeners();
+      break;
+    case 'setup':
+      attachSetupListeners();
+      break;
+    case 'setup-lock':
+      attachSetupLockListeners();
+      break;
+    case 'auction':
+      attachAuctionListeners();
+      break;
+  }
+}
 
-      if (nameInput && problemInput && nameInput.value.trim() && problemInput.value.trim()) {
-        registerTeam(nameInput.value.trim(), problemInput.value.trim());
+function attachRegistrationListeners(): void {
+  const form = document.getElementById('registration-form');
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const nameInput = getInputById('team-name');
+    const problemInput = getTextAreaById('problem-statement');
+
+    if (nameInput && problemInput && nameInput.value.trim() && problemInput.value.trim()) {
+      registerTeam(nameInput.value.trim(), problemInput.value.trim());
+    }
+  });
+}
+
+function attachSetupListeners(): void {
+  // Click on cards to drop them
+  document.querySelectorAll('.setup-card.clickable').forEach((card) => {
+    card.addEventListener('click', () => {
+      const cardId = card.getAttribute('data-card-id');
+      const isSegmentAttr = card.getAttribute('data-is-segment');
+      if (cardId && isSegmentAttr !== null) {
+        const isSegment = isSegmentAttr === 'true';
+        dropCard(parseInt(cardId, 10), isSegment);
       }
     });
+  });
+
+  // Draw buttons
+  document.getElementById('draw-segment-btn')?.addEventListener('click', () => {
+    drawCard('segment');
+  });
+
+  document.getElementById('draw-idea-btn')?.addEventListener('click', () => {
+    drawCard('idea');
+  });
+
+  document.getElementById('skip-draw-btn')?.addEventListener('click', () => {
+    skipDraw();
+  });
+}
+
+function attachSetupLockListeners(): void {
+  let selectedSegmentId: number | null = null;
+  let selectedIdeaId: number | null = null;
+
+  function updateLockButton(): void {
+    const lockBtn = document.getElementById('lock-btn');
+    if (lockBtn instanceof HTMLButtonElement) {
+      lockBtn.disabled = selectedSegmentId === null || selectedIdeaId === null;
+    }
   }
+
+  // Segment card selection
+  document.querySelectorAll('.setup-card.segment.selectable').forEach((card) => {
+    card.addEventListener('click', () => {
+      // Clear previous selection
+      document.querySelectorAll('.setup-card.segment.selectable').forEach((c) => {
+        c.classList.remove('selected');
+      });
+      // Select this card
+      card.classList.add('selected');
+      const id = card.getAttribute('data-segment-id');
+      selectedSegmentId = id ? parseInt(id, 10) : null;
+      updateLockButton();
+    });
+  });
+
+  // Idea card selection
+  document.querySelectorAll('.setup-card.idea.selectable').forEach((card) => {
+    card.addEventListener('click', () => {
+      // Clear previous selection
+      document.querySelectorAll('.setup-card.idea.selectable').forEach((c) => {
+        c.classList.remove('selected');
+      });
+      // Select this card
+      card.classList.add('selected');
+      const id = card.getAttribute('data-idea-id');
+      selectedIdeaId = id ? parseInt(id, 10) : null;
+      updateLockButton();
+    });
+  });
+
+  // Lock button
+  document.getElementById('lock-btn')?.addEventListener('click', () => {
+    if (selectedSegmentId !== null && selectedIdeaId !== null) {
+      lockSetup(selectedSegmentId, selectedIdeaId);
+    }
+  });
+}
+
+function attachAuctionListeners(): void {
+  const bidInput = getInputById('bid-amount');
+  if (!bidInput) return;
+
+  // Increment button
+  document.getElementById('bid-increase')?.addEventListener('click', () => {
+    const current = parseInt(bidInput.value, 10) || 0;
+    const max = parseInt(bidInput.max, 10) || 100;
+    if (current < max) {
+      bidInput.value = String(current + 1);
+    }
+  });
+
+  // Decrement button
+  document.getElementById('bid-decrease')?.addEventListener('click', () => {
+    const current = parseInt(bidInput.value, 10) || 0;
+    const min = parseInt(bidInput.min, 10) || 1;
+    if (current > min) {
+      bidInput.value = String(current - 1);
+    }
+  });
+
+  // Place bid button
+  document.getElementById('place-bid-btn')?.addEventListener('click', () => {
+    const amount = parseInt(bidInput.value, 10);
+    if (!isNaN(amount) && amount > 0) {
+      placeBid(amount);
+    }
+  });
+
+  // Enter key on input
+  bidInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      document.getElementById('place-bid-btn')?.click();
+    }
+  });
 }
 
 // ===========================================

@@ -10,8 +10,35 @@ import type {
   TeamConfig,
   PlayerRole,
 } from '@esop-wars/shared';
-import { TEAM_DEFINITIONS, GAME } from '@esop-wars/shared';
-import { createInitialState, registerTeam, advancePhase, isPhaseComplete } from './game-engine';
+import { TEAM_DEFINITIONS, GAME, TIMING } from '@esop-wars/shared';
+import {
+  createInitialState,
+  registerTeam,
+  advancePhase,
+  isPhaseComplete,
+  dropCard,
+  drawCard,
+  skipDraw,
+  lockSetup,
+  placeBid,
+  closeBidding,
+  getCurrentCard,
+} from './game-engine';
+import {
+  validateDropCard,
+  validateDrawCard,
+  validateSkipDraw,
+  validateLockSetup,
+  validatePlaceBid,
+} from './validators';
+import {
+  decideSetupDrop,
+  decideSetupDraw,
+  decideSetupLock,
+  decideBid,
+  getBotDelay,
+  BOT_TIMING,
+} from './bot-player';
 
 // ===========================================
 // Type Guards
@@ -182,9 +209,31 @@ export class GameRoom {
         this.handleRegisterTeam(ws, session, msg.name, msg.problemStatement);
         break;
 
-      // Additional handlers will be added in Phase 3+
+      case 'drop-card':
+        this.handleDropCard(ws, session, msg.cardId, msg.isSegment);
+        break;
+
+      case 'draw-card':
+        this.handleDrawCard(ws, session, msg.deckType);
+        break;
+
+      case 'skip-draw':
+        this.handleSkipDraw(ws, session);
+        break;
+
+      case 'lock-setup':
+        this.handleLockSetup(ws, session, msg.segmentId, msg.ideaId);
+        break;
+
+      case 'place-bid':
+        this.handlePlaceBid(ws, session, msg.amount);
+        break;
+
+      case 'pass-bid':
+        // No action needed for pass, just acknowledge
+        break;
+
       default: {
-        // TypeScript narrows msg to never in exhaustive switch, but we may have unhandled types
         const unhandledMsg: { type: string } = msg;
         this.send(ws, { type: 'error', message: `Unknown message type: ${unhandledMsg.type}` });
       }
@@ -388,6 +437,216 @@ export class GameRoom {
     this.checkPhaseCompletion();
   }
 
+  // ===========================================
+  // Setup Phase Handlers
+  // ===========================================
+
+  private handleDropCard(
+    ws: WebSocket,
+    session: SessionData,
+    cardId: number,
+    isSegment: boolean
+  ): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validateDropCard(this.roomState.gameState, session.teamIndex, cardId);
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    this.roomState.gameState = dropCard(
+      this.roomState.gameState,
+      session.teamIndex,
+      cardId,
+      isSegment
+    );
+
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    // Schedule bot draw if it's a bot's turn
+    this.scheduleBotTurnIfNeeded();
+  }
+
+  private handleDrawCard(
+    ws: WebSocket,
+    session: SessionData,
+    deckType: 'segment' | 'idea'
+  ): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validateDrawCard(this.roomState.gameState, session.teamIndex, deckType);
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    this.roomState.gameState = drawCard(
+      this.roomState.gameState,
+      session.teamIndex,
+      deckType
+    );
+
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    this.checkPhaseCompletion();
+    this.scheduleBotTurnIfNeeded();
+  }
+
+  private handleSkipDraw(ws: WebSocket, session: SessionData): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validateSkipDraw(this.roomState.gameState, session.teamIndex);
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    this.roomState.gameState = skipDraw(this.roomState.gameState, session.teamIndex);
+
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    this.checkPhaseCompletion();
+    this.scheduleBotTurnIfNeeded();
+  }
+
+  private handleLockSetup(
+    ws: WebSocket,
+    session: SessionData,
+    segmentId: number,
+    ideaId: number
+  ): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validateLockSetup(
+      this.roomState.gameState,
+      session.teamIndex,
+      segmentId,
+      ideaId
+    );
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    this.roomState.gameState = lockSetup(
+      this.roomState.gameState,
+      session.teamIndex,
+      segmentId,
+      ideaId
+    );
+
+    this.broadcast({
+      type: 'team-updated',
+      teamIndex: session.teamIndex,
+      team: this.roomState.gameState.teams[session.teamIndex],
+    });
+
+    this.checkPhaseCompletion();
+  }
+
+  // ===========================================
+  // Auction Phase Handlers
+  // ===========================================
+
+  private handlePlaceBid(ws: WebSocket, session: SessionData, amount: number): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validatePlaceBid(this.roomState.gameState, session.teamIndex, amount);
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    this.roomState.gameState = placeBid(this.roomState.gameState, session.teamIndex, amount);
+
+    this.broadcast({
+      type: 'bid-placed',
+      teamIndex: session.teamIndex,
+      amount,
+    });
+
+    // Reset auction timer
+    this.scheduleAuctionTimeout();
+
+    // Trigger bot counter-bids
+    this.scheduleBotBids();
+  }
+
+  // ===========================================
+  // Bot Scheduling
+  // ===========================================
+
+  private scheduleBotTurnIfNeeded(): void {
+    if (!this.roomState?.gameState) return;
+
+    const phase = this.roomState.gameState.phase;
+
+    if (phase === 'setup') {
+      const currentTurn = this.roomState.gameState.setupDraftTurn;
+      const team = this.roomState.gameState.teams[currentTurn];
+
+      if (team.isBot) {
+        this.scheduleAlarm(getBotDelay());
+      }
+    } else if (phase === 'setup-lock') {
+      // Schedule bot locks
+      this.scheduleBotLocks();
+    } else if (phase === 'auction') {
+      // Start auction timer
+      this.scheduleAuctionTimeout();
+      this.scheduleBotBids();
+    }
+  }
+
+  private scheduleBotLocks(): void {
+    if (!this.roomState?.gameState) return;
+
+    const botsNeedingLock = this.roomState.gameState.teams
+      .map((t, i) => ({ team: t, index: i }))
+      .filter(({ team }) => team.isBot && team.lockedSegment === null);
+
+    if (botsNeedingLock.length > 0) {
+      this.scheduleAlarm(getBotDelay());
+    }
+  }
+
+  private scheduleBotBids(): void {
+    if (!this.roomState?.gameState) return;
+
+    // Check if any bots want to bid
+    const eligibleBots = this.roomState.gameState.teams
+      .map((t, i) => ({ team: t, index: i }))
+      .filter(
+        ({ team }) =>
+          team.isBot &&
+          !team.isDisqualified &&
+          team.employees.length < GAME.EMPLOYEES_PER_TEAM &&
+          team.esopRemaining > 0
+      );
+
+    if (eligibleBots.length > 0) {
+      this.scheduleAlarm(BOT_TIMING.BID_DELAY_MS);
+    }
+  }
+
+  private scheduleAuctionTimeout(): void {
+    this.scheduleAlarm(TIMING.BID_TIMEOUT_MS);
+  }
+
+  private scheduleAlarm(delayMs: number): void {
+    this.state.storage.setAlarm(Date.now() + delayMs);
+  }
+
   private autoRegisterBots(): void {
     if (!this.roomState?.gameState) return;
 
@@ -495,7 +754,173 @@ export class GameRoom {
   }
 
   async alarm(): Promise<void> {
-    // Handle timers (bid timeout, AFK, etc.)
-    // Will be implemented in Phase 3+
+    if (!this.roomState?.gameState) return;
+
+    const phase = this.roomState.gameState.phase;
+
+    if (phase === 'setup') {
+      this.executeBotSetupTurn();
+    } else if (phase === 'setup-lock') {
+      this.executeBotLock();
+    } else if (phase === 'auction' || phase === 'secondary-hire') {
+      this.handleAuctionTimeout();
+    }
+  }
+
+  private executeBotSetupTurn(): void {
+    if (!this.roomState?.gameState) return;
+
+    const currentTurn = this.roomState.gameState.setupDraftTurn;
+    const team = this.roomState.gameState.teams[currentTurn];
+
+    if (!team.isBot) return;
+
+    if (this.roomState.gameState.setupPhase === 'drop') {
+      const decision = decideSetupDrop(this.roomState.gameState, currentTurn);
+      if (decision) {
+        this.roomState.gameState = dropCard(
+          this.roomState.gameState,
+          currentTurn,
+          decision.cardId,
+          decision.isSegment
+        );
+
+        this.broadcast({
+          type: 'game-state',
+          state: this.roomState.gameState,
+        });
+
+        // Schedule draw phase
+        this.scheduleAlarm(getBotDelay());
+      }
+    } else if (this.roomState.gameState.setupPhase === 'draw') {
+      const decision = decideSetupDraw(this.roomState.gameState, currentTurn);
+
+      if (decision.action === 'draw' && decision.deckType) {
+        this.roomState.gameState = drawCard(
+          this.roomState.gameState,
+          currentTurn,
+          decision.deckType
+        );
+      } else {
+        this.roomState.gameState = skipDraw(this.roomState.gameState, currentTurn);
+      }
+
+      this.broadcast({
+        type: 'game-state',
+        state: this.roomState.gameState,
+      });
+
+      this.checkPhaseCompletion();
+      this.scheduleBotTurnIfNeeded();
+    }
+  }
+
+  private executeBotLock(): void {
+    if (!this.roomState?.gameState) return;
+
+    // Find first bot that needs to lock
+    const botIndex = this.roomState.gameState.teams.findIndex(
+      (t) => t.isBot && t.lockedSegment === null
+    );
+
+    if (botIndex === -1) return;
+
+    const decision = decideSetupLock(this.roomState.gameState, botIndex);
+    if (decision) {
+      this.roomState.gameState = lockSetup(
+        this.roomState.gameState,
+        botIndex,
+        decision.segmentId,
+        decision.ideaId
+      );
+
+      this.broadcast({
+        type: 'team-updated',
+        teamIndex: botIndex,
+        team: this.roomState.gameState.teams[botIndex],
+      });
+
+      this.checkPhaseCompletion();
+
+      // Schedule next bot lock if needed
+      if (this.roomState.gameState.phase === 'setup-lock') {
+        this.scheduleBotLocks();
+      }
+    }
+  }
+
+  private handleAuctionTimeout(): void {
+    if (!this.roomState?.gameState) return;
+
+    const card = getCurrentCard(this.roomState.gameState);
+    if (!card) return;
+
+    // First check if any bots want to bid
+    const eligibleBots = this.roomState.gameState.teams
+      .map((t, i) => ({ team: t, index: i }))
+      .filter(
+        ({ team, index }) =>
+          team.isBot &&
+          !team.isDisqualified &&
+          team.employees.length < GAME.EMPLOYEES_PER_TEAM &&
+          team.esopRemaining > 0 &&
+          (this.roomState?.gameState?.currentBid?.teamIndex !== index)
+      );
+
+    // Let a random eligible bot try to bid
+    if (eligibleBots.length > 0) {
+      const randomBot = eligibleBots[Math.floor(Math.random() * eligibleBots.length)];
+      const decision = decideBid(this.roomState.gameState, randomBot.index, card);
+
+      if (decision.action === 'bid' && decision.amount !== undefined) {
+        const validation = validatePlaceBid(
+          this.roomState.gameState,
+          randomBot.index,
+          decision.amount
+        );
+
+        if (validation.valid) {
+          this.roomState.gameState = placeBid(
+            this.roomState.gameState,
+            randomBot.index,
+            decision.amount
+          );
+
+          this.broadcast({
+            type: 'bid-placed',
+            teamIndex: randomBot.index,
+            amount: decision.amount,
+          });
+
+          // Reset timer for more bids
+          this.scheduleAuctionTimeout();
+          return;
+        }
+      }
+    }
+
+    // Close bidding if no more bids
+    const previousBid = this.roomState.gameState.currentBid;
+    this.roomState.gameState = closeBidding(this.roomState.gameState);
+
+    this.broadcast({
+      type: 'bidding-closed',
+      winner: previousBid,
+      card,
+    });
+
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    // Check if auction complete
+    if (this.roomState.gameState.phase === 'auction') {
+      // Start next card
+      this.scheduleBotTurnIfNeeded();
+    } else {
+      this.checkPhaseCompletion();
+    }
   }
 }

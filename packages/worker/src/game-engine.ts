@@ -8,6 +8,8 @@ import type {
   GameConfig,
   Phase,
   EmployeeCard,
+  SegmentCard,
+  IdeaCard,
 } from '@esop-wars/shared';
 import { GAME } from '@esop-wars/shared';
 import {
@@ -17,6 +19,7 @@ import {
   segmentCards,
   productCards,
   serviceCards,
+  getSetupBonus,
 } from './data';
 
 // ===========================================
@@ -34,6 +37,14 @@ function shuffleArray<T>(array: T[]): T[] {
 
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
+}
+
+function isSegmentCard(card: SegmentCard | IdeaCard): card is SegmentCard {
+  return !('type' in card);
+}
+
+function isIdeaCard(card: SegmentCard | IdeaCard): card is IdeaCard {
+  return 'type' in card;
 }
 
 // ===========================================
@@ -238,6 +249,206 @@ function initSetupPhase(state: GameState): GameState {
   newState.setupRound = 1;
   newState.setupPhase = 'drop';
   newState.setupDraftTurn = 0;
+
+  return newState;
+}
+
+export function dropCard(
+  state: GameState,
+  teamIndex: number,
+  cardId: number,
+  isSegment: boolean
+): GameState {
+  const newState = deepClone(state);
+  const team = newState.teams[teamIndex];
+
+  // Find and remove card from hand
+  const cardIndex = team.setupHand.findIndex((c) => c.id === cardId);
+  if (cardIndex === -1) {
+    return state; // Card not found
+  }
+
+  const [droppedCard] = team.setupHand.splice(cardIndex, 1);
+  newState.setupDiscard.push(droppedCard);
+
+  // Move to draw phase
+  newState.setupPhase = 'draw';
+
+  return newState;
+}
+
+export function drawCard(
+  state: GameState,
+  teamIndex: number,
+  deckType: 'segment' | 'idea'
+): GameState {
+  const newState = deepClone(state);
+  const team = newState.teams[teamIndex];
+
+  const deck = deckType === 'segment' ? newState.segmentDeck : newState.ideaDeck;
+
+  if (deck.length === 0) {
+    return state; // No cards to draw
+  }
+
+  const drawnCard = deck.shift();
+  if (drawnCard) {
+    team.setupHand.push(drawnCard);
+  }
+
+  // Advance to next turn
+  return advanceSetupTurn(newState);
+}
+
+export function skipDraw(state: GameState, teamIndex: number): GameState {
+  const newState = deepClone(state);
+  return advanceSetupTurn(newState);
+}
+
+function advanceSetupTurn(state: GameState): GameState {
+  const newState = deepClone(state);
+  const activeTeamCount = newState.teams.filter((t) => !t.isDisqualified).length;
+
+  // Move to next team
+  newState.setupDraftTurn = (newState.setupDraftTurn + 1) % activeTeamCount;
+
+  // If we've gone through all teams, check if round is complete
+  if (newState.setupDraftTurn === 0) {
+    newState.setupRound++;
+
+    // Check if all setup rounds are complete
+    if (newState.setupRound > GAME.SETUP_ROUNDS) {
+      // Move to setup-lock phase
+      newState.phase = 'setup-lock';
+      return newState;
+    }
+  }
+
+  // Reset to drop phase for next turn
+  newState.setupPhase = 'drop';
+
+  return newState;
+}
+
+export function lockSetup(
+  state: GameState,
+  teamIndex: number,
+  segmentId: number,
+  ideaId: number
+): GameState {
+  const newState = deepClone(state);
+  const team = newState.teams[teamIndex];
+
+  // Find segment and idea in hand
+  const segmentCard = team.setupHand.find((c) => c.id === segmentId && isSegmentCard(c));
+  const ideaCard = team.setupHand.find((c) => c.id === ideaId && isIdeaCard(c));
+
+  if (!segmentCard || !ideaCard || !isSegmentCard(segmentCard) || !isIdeaCard(ideaCard)) {
+    return state; // Cards not found
+  }
+
+  // Lock the selections
+  team.lockedSegment = segmentCard;
+  team.lockedIdea = ideaCard;
+
+  // Find matching bonus
+  team.setupBonus = getSetupBonus(segmentCard.name, ideaCard.name);
+
+  // Clear setup hand
+  team.setupHand = [];
+
+  return newState;
+}
+
+// ===========================================
+// Auction Phase
+// ===========================================
+
+export function placeBid(
+  state: GameState,
+  teamIndex: number,
+  amount: number
+): GameState {
+  const newState = deepClone(state);
+  const team = newState.teams[teamIndex];
+
+  // Validate bid
+  if (amount > team.esopRemaining) {
+    return state; // Not enough ESOP
+  }
+
+  if (newState.currentBid && amount <= newState.currentBid.amount) {
+    return state; // Bid must be higher
+  }
+
+  newState.currentBid = { teamIndex, amount };
+
+  return newState;
+}
+
+export function closeBidding(state: GameState): GameState {
+  const newState = deepClone(state);
+  const currentCard = newState.employeeDeck[newState.currentCardIndex];
+
+  if (!currentCard) {
+    return state;
+  }
+
+  if (newState.currentBid) {
+    const winningTeam = newState.teams[newState.currentBid.teamIndex];
+
+    // Award card to winner
+    const hiredEmployee = {
+      ...currentCard,
+      bidAmount: newState.currentBid.amount,
+    };
+    winningTeam.employees.push(hiredEmployee);
+    winningTeam.esopRemaining -= newState.currentBid.amount;
+
+    // Check if team is complete
+    if (winningTeam.employees.length >= GAME.EMPLOYEES_PER_TEAM) {
+      winningTeam.isComplete = true;
+    }
+  }
+
+  // Move to next card
+  newState.currentCardIndex++;
+  newState.currentBid = null;
+
+  // Check if auction is complete
+  const allComplete = newState.teams.every(
+    (t) => t.employees.length >= GAME.EMPLOYEES_PER_TEAM || t.isDisqualified
+  );
+
+  if (allComplete || newState.currentCardIndex >= newState.employeeDeck.length) {
+    // Disqualify incomplete teams
+    newState.teams.forEach((team) => {
+      if (team.employees.length < GAME.EMPLOYEES_PER_TEAM) {
+        team.isDisqualified = true;
+      }
+    });
+    newState.phase = 'auction-summary';
+  }
+
+  return newState;
+}
+
+export function skipCard(state: GameState): GameState {
+  const newState = deepClone(state);
+
+  // Move to next card without awarding
+  newState.currentCardIndex++;
+  newState.currentBid = null;
+
+  // Check if auction is complete
+  if (newState.currentCardIndex >= newState.employeeDeck.length) {
+    newState.teams.forEach((team) => {
+      if (team.employees.length < GAME.EMPLOYEES_PER_TEAM) {
+        team.isDisqualified = true;
+      }
+    });
+    newState.phase = 'auction-summary';
+  }
 
   return newState;
 }
