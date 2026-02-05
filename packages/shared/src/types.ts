@@ -270,10 +270,13 @@ export type ServerMessage =
   | { type: 'turn-changed'; teamIndex: number }
   | { type: 'bid-placed'; teamIndex: number; amount: number }
   | { type: 'bidding-closed'; winner: Bid | null; card: EmployeeCard }
-  | { type: 'wildcards-revealed'; choices: Record<number, WildcardChoice> }
-  | { type: 'market-result'; card: MarketCard; effects: RoundPerformance[] }
-  | { type: 'market-leaders'; leaders: number[] }
-  | { type: 'exit-drawn'; card: ExitCard }
+  | { type: 'wildcard-selected'; teamIndex: number }
+  | { type: 'wildcards-revealed'; selections: (WildcardChoice | null)[] }
+  | { type: 'market-card-drawn'; card: MarketCard | null }
+  | { type: 'market-results'; performance: RoundPerformance[]; teams: Team[] }
+  | { type: 'employee-dropped'; teamIndex: number }
+  | { type: 'drops-revealed'; dropped: DroppedEmployee[] }
+  | { type: 'exit-card-drawn'; card: ExitCard | null }
   | { type: 'error'; message: string };
 
 // ===========================================

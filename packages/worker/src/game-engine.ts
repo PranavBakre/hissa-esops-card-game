@@ -10,6 +10,8 @@ import type {
   EmployeeCard,
   SegmentCard,
   IdeaCard,
+  WildcardChoice,
+  MarketCard,
 } from '@esop-wars/shared';
 import { GAME } from '@esop-wars/shared';
 import {
@@ -19,7 +21,9 @@ import {
   segmentCards,
   productCards,
   serviceCards,
+  exitCards,
   getSetupBonus,
+  categoryPerks,
 } from './data';
 
 // ===========================================
@@ -505,4 +509,323 @@ export function getWinners(state: GameState): { founder: Team; employer: Team; s
     employer,
     sameTeam: founder.name === employer.name,
   };
+}
+
+// ===========================================
+// Wildcard Phase
+// ===========================================
+
+export function selectWildcard(
+  state: GameState,
+  teamIndex: number,
+  choice: WildcardChoice
+): GameState {
+  const newState = deepClone(state);
+  const team = newState.teams[teamIndex];
+
+  // Can't use wildcard if already used
+  if (team.wildcardUsed && choice !== 'pass') {
+    newState.teamWildcardSelections[teamIndex] = 'pass';
+  } else {
+    newState.teamWildcardSelections[teamIndex] = choice;
+  }
+
+  return newState;
+}
+
+export function allWildcardsSelected(state: GameState): boolean {
+  const activeTeams = state.teams.filter((t) => !t.isDisqualified);
+  return activeTeams.every((_, i) => state.teamWildcardSelections[i] !== undefined);
+}
+
+export function applyWildcards(state: GameState): GameState {
+  const newState = deepClone(state);
+
+  // Apply wildcard choices
+  newState.teams.forEach((team, index) => {
+    if (team.isDisqualified) return;
+
+    const choice = newState.teamWildcardSelections[index];
+    if (choice && choice !== 'pass') {
+      team.wildcardUsed = true;
+      team.wildcardActiveThisRound = choice;
+    } else {
+      team.wildcardActiveThisRound = null;
+    }
+  });
+
+  // Clear selections and exit wildcard phase
+  newState.wildcardPhase = false;
+
+  return newState;
+}
+
+// ===========================================
+// Market Round
+// ===========================================
+
+export function drawMarketCard(state: GameState): GameState {
+  const newState = deepClone(state);
+
+  if (newState.marketDeck.length === 0) {
+    return state; // No cards left
+  }
+
+  const card = newState.marketDeck.shift();
+  if (card) {
+    newState.currentMarketCard = card;
+  }
+
+  return newState;
+}
+
+export function applyMarketEffects(state: GameState): GameState {
+  const newState = deepClone(state);
+  const card = newState.currentMarketCard;
+
+  if (!card) return state;
+
+  // Store previous valuations and calculate new ones
+  newState.roundPerformance = [];
+
+  newState.teams.forEach((team, index) => {
+    if (team.isDisqualified) return;
+
+    const previousValuation = team.valuation;
+    team.previousValuation = previousValuation;
+
+    // Calculate base change from employees
+    let totalChange = 0;
+
+    team.employees.forEach((employee) => {
+      // Hard skill contribution
+      const hardSkillMod = card.hardSkillModifiers[employee.category] ?? 0;
+      totalChange += employee.hardSkill * hardSkillMod;
+
+      // Soft skill contribution
+      Object.entries(employee.softSkills).forEach(([skillName, skillValue]) => {
+        const softSkillMod = card.softSkillModifiers[skillName] ?? 0;
+        totalChange += skillValue * softSkillMod;
+      });
+    });
+
+    // Apply setup bonus if relevant
+    if (team.setupBonus) {
+      const bonusCategory = team.setupBonus.bonus.category;
+      const hasMatchingEmployee = team.employees.some((e) => e.category === bonusCategory);
+      if (hasMatchingEmployee) {
+        totalChange += team.setupBonus.bonus.modifier;
+      }
+    }
+
+    // Apply category perks
+    const categoryCount: Record<string, number> = {};
+    team.employees.forEach((e) => {
+      categoryCount[e.category] = (categoryCount[e.category] ?? 0) + 1;
+    });
+
+    // Sales synergy: +5% with 2+ Sales
+    if ((categoryCount['Sales'] ?? 0) >= 2) {
+      totalChange += 0.05;
+    }
+
+    // Finance crash shield: 25% loss reduction during Market Crash
+    if (card.name === 'Market Crash' && (categoryCount['Finance'] ?? 0) > 0) {
+      if (totalChange < 0) {
+        totalChange *= 0.75;
+      }
+    }
+
+    // Engineering scaling bonus during Rapid Scaling
+    if (card.name === 'Rapid Scaling' && (categoryCount['Engineering'] ?? 0) > 0) {
+      totalChange += 0.05 * (categoryCount['Engineering'] ?? 0);
+    }
+
+    // Apply wildcard effects
+    if (team.wildcardActiveThisRound === 'double-down') {
+      totalChange *= 2;
+    } else if (team.wildcardActiveThisRound === 'shield' && totalChange < 0) {
+      totalChange = 0;
+    }
+
+    // Calculate new valuation
+    const valuationChange = previousValuation * totalChange;
+    const newValuation = Math.max(0, previousValuation + valuationChange);
+
+    team.valuation = Math.round(newValuation);
+    team.currentGain = Math.round(valuationChange);
+
+    // Record performance
+    newState.roundPerformance.push({
+      teamIndex: index,
+      previousValuation,
+      newValuation: team.valuation,
+      gain: team.currentGain,
+      percentChange: totalChange * 100,
+    });
+  });
+
+  // Move card to used pile
+  newState.usedMarketCards.push(card);
+  newState.currentMarketCard = null;
+
+  // Clear wildcard active status
+  newState.teams.forEach((team) => {
+    team.wildcardActiveThisRound = null;
+  });
+
+  return newState;
+}
+
+export function applyMarketLeaderBonus(state: GameState): GameState {
+  const newState = deepClone(state);
+
+  // Reset leader status
+  newState.teams.forEach((team) => {
+    team.isMarketLeader = false;
+  });
+
+  // Find top 2 teams by valuation
+  const activeTeams = newState.teams
+    .map((t, i) => ({ team: t, index: i }))
+    .filter(({ team }) => !team.isDisqualified)
+    .sort((a, b) => b.team.valuation - a.team.valuation);
+
+  // Top 2 get market leader status and bonus
+  const leaderBonus = 0.05; // 5% bonus
+  activeTeams.slice(0, 2).forEach(({ team }) => {
+    team.isMarketLeader = true;
+    team.marketLeaderCount++;
+    team.valuation = Math.round(team.valuation * (1 + leaderBonus));
+  });
+
+  return newState;
+}
+
+// ===========================================
+// Secondary Auction
+// ===========================================
+
+export function dropEmployee(
+  state: GameState,
+  teamIndex: number,
+  employeeId: number
+): GameState {
+  const newState = deepClone(state);
+  const team = newState.teams[teamIndex];
+
+  // Find employee
+  const empIndex = team.employees.findIndex((e) => e.id === employeeId);
+  if (empIndex === -1) return state;
+
+  // Remove from team and add to dropped list
+  const [employee] = team.employees.splice(empIndex, 1);
+
+  // Convert back to base EmployeeCard (remove bidAmount)
+  const baseEmployee: EmployeeCard = {
+    id: employee.id,
+    name: employee.name,
+    role: employee.role,
+    category: employee.category,
+    hardSkill: employee.hardSkill,
+    softSkills: employee.softSkills,
+  };
+
+  newState.droppedEmployees.push({
+    employee: baseEmployee,
+    fromTeamIndex: teamIndex,
+  });
+
+  return newState;
+}
+
+export function allEmployeesDropped(state: GameState): boolean {
+  const activeTeamCount = state.teams.filter((t) => !t.isDisqualified).length;
+  return state.droppedEmployees.length >= activeTeamCount;
+}
+
+export function populateSecondaryPool(state: GameState): GameState {
+  const newState = deepClone(state);
+
+  // Add reserve employees to pool
+  newState.secondaryPool = [
+    ...newState.droppedEmployees.map((d) => d.employee),
+    ...newState.reserveEmployees,
+  ];
+
+  // Shuffle the pool
+  newState.secondaryPool = shuffleArray(newState.secondaryPool);
+
+  // Reset for secondary hiring
+  newState.currentCardIndex = 0;
+  newState.currentBid = null;
+
+  return newState;
+}
+
+export function getSecondaryCard(state: GameState): EmployeeCard | null {
+  if (state.phase !== 'secondary-hire') return null;
+  return state.secondaryPool[state.currentCardIndex] ?? null;
+}
+
+export function closeSecondaryBidding(state: GameState): GameState {
+  const newState = deepClone(state);
+  const currentCard = newState.secondaryPool[newState.currentCardIndex];
+
+  if (!currentCard) return state;
+
+  if (newState.currentBid) {
+    const winningTeam = newState.teams[newState.currentBid.teamIndex];
+
+    // Award card to winner
+    const hiredEmployee = {
+      ...currentCard,
+      bidAmount: newState.currentBid.amount,
+    };
+    winningTeam.employees.push(hiredEmployee);
+    winningTeam.esopRemaining -= newState.currentBid.amount;
+  }
+
+  // Move to next card
+  newState.currentCardIndex++;
+  newState.currentBid = null;
+
+  // Check if secondary auction is complete
+  if (newState.currentCardIndex >= newState.secondaryPool.length) {
+    newState.secondaryPool = [];
+  }
+
+  return newState;
+}
+
+// ===========================================
+// Exit Phase
+// ===========================================
+
+export function drawExitCard(state: GameState): GameState {
+  const newState = deepClone(state);
+
+  // Pick random exit card
+  const randomIndex = Math.floor(Math.random() * exitCards.length);
+  newState.exitCard = exitCards[randomIndex];
+
+  return newState;
+}
+
+export function applyExitMultiplier(state: GameState): GameState {
+  const newState = deepClone(state);
+
+  if (!newState.exitCard) return state;
+
+  // Apply multiplier to all active teams
+  newState.teams.forEach((team) => {
+    if (!team.isDisqualified && newState.exitCard) {
+      team.valuation = Math.round(team.valuation * newState.exitCard.multiplier);
+    }
+  });
+
+  // Move to winner phase
+  newState.phase = 'winner';
+
+  return newState;
 }

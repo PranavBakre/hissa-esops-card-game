@@ -23,6 +23,19 @@ import {
   placeBid,
   closeBidding,
   getCurrentCard,
+  selectWildcard,
+  allWildcardsSelected,
+  applyWildcards,
+  drawMarketCard,
+  applyMarketEffects,
+  applyMarketLeaderBonus,
+  dropEmployee,
+  allEmployeesDropped,
+  populateSecondaryPool,
+  getSecondaryCard,
+  closeSecondaryBidding,
+  drawExitCard,
+  applyExitMultiplier,
 } from './game-engine';
 import {
   validateDropCard,
@@ -30,12 +43,18 @@ import {
   validateSkipDraw,
   validateLockSetup,
   validatePlaceBid,
+  validateSelectWildcard,
+  validateDrawMarket,
+  validateDropEmployee,
+  validateDrawExit,
 } from './validators';
 import {
   decideSetupDrop,
   decideSetupDraw,
   decideSetupLock,
   decideBid,
+  decideWildcard,
+  decideSecondaryDrop,
   getBotDelay,
   BOT_TIMING,
 } from './bot-player';
@@ -235,6 +254,22 @@ export class GameRoom {
 
       case 'pass-bid':
         // No action needed for pass, just acknowledge
+        break;
+
+      case 'select-wildcard':
+        this.handleSelectWildcard(ws, session, msg.choice);
+        break;
+
+      case 'draw-market':
+        this.handleDrawMarket(ws, session);
+        break;
+
+      case 'drop-employee':
+        this.handleDropEmployee(ws, session, msg.employeeId);
+        break;
+
+      case 'draw-exit':
+        this.handleDrawExit(ws, session);
         break;
 
       default: {
@@ -623,6 +658,210 @@ export class GameRoom {
   }
 
   // ===========================================
+  // Wildcard Phase Handlers
+  // ===========================================
+
+  private handleSelectWildcard(
+    ws: WebSocket,
+    session: SessionData,
+    choice: 'double-down' | 'shield' | 'pass'
+  ): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validateSelectWildcard(
+      this.roomState.gameState,
+      session.teamIndex,
+      choice
+    );
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    this.roomState.gameState = selectWildcard(
+      this.roomState.gameState,
+      session.teamIndex,
+      choice
+    );
+
+    // Notify that selection was received (hidden from others)
+    this.send(ws, { type: 'wildcard-selected', teamIndex: session.teamIndex });
+
+    // Check if all selections are in
+    if (allWildcardsSelected(this.roomState.gameState)) {
+      this.revealWildcardsAndDrawMarket();
+    }
+  }
+
+  private revealWildcardsAndDrawMarket(): void {
+    if (!this.roomState?.gameState) return;
+
+    // Apply wildcards
+    this.roomState.gameState = applyWildcards(this.roomState.gameState);
+
+    // Broadcast wildcard reveals
+    this.broadcast({
+      type: 'wildcards-revealed',
+      selections: this.roomState.gameState.teams.map((t) => t.wildcardActiveThisRound),
+    });
+
+    // Broadcast updated state
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+  }
+
+  // ===========================================
+  // Market Phase Handlers
+  // ===========================================
+
+  private handleDrawMarket(ws: WebSocket, session: SessionData): void {
+    if (!this.roomState?.gameState) return;
+
+    const validation = validateDrawMarket(
+      this.roomState.gameState,
+      session.teamIndex ?? -1,
+      session.isHost
+    );
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    // Draw market card
+    this.roomState.gameState = drawMarketCard(this.roomState.gameState);
+
+    // Broadcast drawn card
+    this.broadcast({
+      type: 'market-card-drawn',
+      card: this.roomState.gameState.currentMarketCard,
+    });
+
+    // Apply market effects
+    this.roomState.gameState = applyMarketEffects(this.roomState.gameState);
+
+    // Apply market leader bonus
+    this.roomState.gameState = applyMarketLeaderBonus(this.roomState.gameState);
+
+    // Broadcast results
+    this.broadcast({
+      type: 'market-results',
+      performance: this.roomState.gameState.roundPerformance,
+      teams: this.roomState.gameState.teams,
+    });
+
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    // Advance phase
+    this.checkPhaseCompletion();
+  }
+
+  // ===========================================
+  // Secondary Auction Handlers
+  // ===========================================
+
+  private handleDropEmployee(
+    ws: WebSocket,
+    session: SessionData,
+    employeeId: number
+  ): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validateDropEmployee(
+      this.roomState.gameState,
+      session.teamIndex,
+      employeeId
+    );
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    this.roomState.gameState = dropEmployee(
+      this.roomState.gameState,
+      session.teamIndex,
+      employeeId
+    );
+
+    // Notify that drop was received (hidden from others until all dropped)
+    this.send(ws, { type: 'employee-dropped', teamIndex: session.teamIndex });
+
+    // Check if all drops are in
+    if (allEmployeesDropped(this.roomState.gameState)) {
+      this.revealDropsAndStartSecondary();
+    }
+  }
+
+  private revealDropsAndStartSecondary(): void {
+    if (!this.roomState?.gameState) return;
+
+    // Broadcast dropped employees
+    this.broadcast({
+      type: 'drops-revealed',
+      dropped: this.roomState.gameState.droppedEmployees,
+    });
+
+    // Populate secondary pool
+    this.roomState.gameState = populateSecondaryPool(this.roomState.gameState);
+
+    // Advance to secondary-hire phase
+    this.roomState.gameState.phase = 'secondary-hire';
+
+    this.broadcast({
+      type: 'phase-changed',
+      phase: 'secondary-hire',
+    });
+
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    // Start secondary auction timer
+    this.scheduleAuctionTimeout();
+    this.scheduleBotBids();
+  }
+
+  // ===========================================
+  // Exit Phase Handlers
+  // ===========================================
+
+  private handleDrawExit(ws: WebSocket, session: SessionData): void {
+    if (!this.roomState?.gameState) return;
+
+    const validation = validateDrawExit(this.roomState.gameState, session.isHost);
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    // Draw exit card
+    this.roomState.gameState = drawExitCard(this.roomState.gameState);
+
+    // Broadcast exit card
+    this.broadcast({
+      type: 'exit-card-drawn',
+      card: this.roomState.gameState.exitCard,
+    });
+
+    // Apply multiplier
+    this.roomState.gameState = applyExitMultiplier(this.roomState.gameState);
+
+    // Broadcast final results
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    // Room is now finished
+    this.roomState.status = 'FINISHED';
+  }
+
+  // ===========================================
   // Bot Scheduling
   // ===========================================
 
@@ -641,10 +880,16 @@ export class GameRoom {
     } else if (phase === 'setup-lock') {
       // Schedule bot locks
       this.scheduleBotLocks();
-    } else if (phase === 'auction') {
+    } else if (phase === 'auction' || phase === 'secondary-hire') {
       // Start auction timer
       this.scheduleAuctionTimeout();
       this.scheduleBotBids();
+    } else if (this.roomState.gameState.wildcardPhase) {
+      // Schedule bot wildcard selections
+      this.scheduleBotWildcards();
+    } else if (phase === 'secondary-drop') {
+      // Schedule bot drops
+      this.scheduleBotDrops();
     }
   }
 
@@ -676,6 +921,40 @@ export class GameRoom {
 
     if (eligibleBots.length > 0) {
       this.scheduleAlarm(BOT_TIMING.BID_DELAY_MS);
+    }
+  }
+
+  private scheduleBotWildcards(): void {
+    if (!this.roomState?.gameState) return;
+
+    const botsNeedingSelection = this.roomState.gameState.teams
+      .map((t, i) => ({ team: t, index: i }))
+      .filter(
+        ({ team, index }) =>
+          team.isBot &&
+          !team.isDisqualified &&
+          this.roomState?.gameState?.teamWildcardSelections[index] === undefined
+      );
+
+    if (botsNeedingSelection.length > 0) {
+      this.scheduleAlarm(getBotDelay());
+    }
+  }
+
+  private scheduleBotDrops(): void {
+    if (!this.roomState?.gameState) return;
+
+    const botsNeedingDrop = this.roomState.gameState.teams
+      .map((t, i) => ({ team: t, index: i }))
+      .filter(
+        ({ team, index }) =>
+          team.isBot &&
+          !team.isDisqualified &&
+          !this.roomState?.gameState?.droppedEmployees.some((d) => d.fromTeamIndex === index)
+      );
+
+    if (botsNeedingDrop.length > 0) {
+      this.scheduleAlarm(getBotDelay());
     }
   }
 
@@ -804,6 +1083,10 @@ export class GameRoom {
       this.executeBotLock();
     } else if (phase === 'auction' || phase === 'secondary-hire') {
       this.handleAuctionTimeout();
+    } else if (this.roomState.gameState.wildcardPhase) {
+      this.executeBotWildcard();
+    } else if (phase === 'secondary-drop') {
+      this.executeBotDrop();
     }
   }
 
@@ -942,7 +1225,14 @@ export class GameRoom {
 
     // Close bidding if no more bids
     const previousBid = this.roomState.gameState.currentBid;
-    this.roomState.gameState = closeBidding(this.roomState.gameState);
+    const phase = this.roomState.gameState.phase;
+
+    // Use appropriate close function based on phase
+    if (phase === 'secondary-hire') {
+      this.roomState.gameState = closeSecondaryBidding(this.roomState.gameState);
+    } else {
+      this.roomState.gameState = closeBidding(this.roomState.gameState);
+    }
 
     this.broadcast({
       type: 'bidding-closed',
@@ -955,12 +1245,81 @@ export class GameRoom {
       state: this.roomState.gameState,
     });
 
-    // Check if auction complete
-    if (this.roomState.gameState.phase === 'auction') {
-      // Start next card
-      this.scheduleBotTurnIfNeeded();
+    // Check if auction/secondary complete
+    if (this.roomState.gameState.phase === 'auction' || this.roomState.gameState.phase === 'secondary-hire') {
+      // Start next card if there are more
+      const nextCard = phase === 'secondary-hire'
+        ? getSecondaryCard(this.roomState.gameState)
+        : getCurrentCard(this.roomState.gameState);
+
+      if (nextCard) {
+        this.scheduleBotTurnIfNeeded();
+      } else {
+        this.checkPhaseCompletion();
+      }
     } else {
       this.checkPhaseCompletion();
+    }
+  }
+
+  private executeBotWildcard(): void {
+    if (!this.roomState?.gameState || !this.roomState.gameState.wildcardPhase) return;
+
+    // Find first bot that needs to select wildcard
+    const botIndex = this.roomState.gameState.teams.findIndex(
+      (t, i) =>
+        t.isBot &&
+        !t.isDisqualified &&
+        this.roomState?.gameState?.teamWildcardSelections[i] === undefined
+    );
+
+    if (botIndex === -1) return;
+
+    const choice = decideWildcard(this.roomState.gameState, botIndex);
+
+    this.roomState.gameState = selectWildcard(
+      this.roomState.gameState,
+      botIndex,
+      choice
+    );
+
+    // Check if all selections are in
+    if (allWildcardsSelected(this.roomState.gameState)) {
+      this.revealWildcardsAndDrawMarket();
+    } else {
+      // Schedule next bot wildcard
+      this.scheduleBotWildcards();
+    }
+  }
+
+  private executeBotDrop(): void {
+    if (!this.roomState?.gameState || this.roomState.gameState.phase !== 'secondary-drop') return;
+
+    // Find first bot that needs to drop
+    const botIndex = this.roomState.gameState.teams.findIndex(
+      (t, i) =>
+        t.isBot &&
+        !t.isDisqualified &&
+        !this.roomState?.gameState?.droppedEmployees.some((d) => d.fromTeamIndex === i)
+    );
+
+    if (botIndex === -1) return;
+
+    const employeeId = decideSecondaryDrop(this.roomState.gameState, botIndex);
+    if (employeeId === null) return;
+
+    this.roomState.gameState = dropEmployee(
+      this.roomState.gameState,
+      botIndex,
+      employeeId
+    );
+
+    // Check if all drops are in
+    if (allEmployeesDropped(this.roomState.gameState)) {
+      this.revealDropsAndStartSecondary();
+    } else {
+      // Schedule next bot drop
+      this.scheduleBotDrops();
     }
   }
 }

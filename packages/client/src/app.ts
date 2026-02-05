@@ -303,6 +303,49 @@ function handleMessage(msg: ServerMessage): void {
       // game-state message follows, which will re-render
       break;
 
+    case 'wildcard-selected':
+      showToast('Wildcard choice submitted', 'success');
+      break;
+
+    case 'wildcards-revealed':
+      // Toast showing wildcards used
+      if (state.gameState) {
+        msg.selections.forEach((choice, index) => {
+          if (choice && choice !== 'pass') {
+            const team = state.gameState?.teams[index];
+            if (team) {
+              showToast(`${team.name} used ${choice}!`, 'warning');
+            }
+          }
+        });
+      }
+      break;
+
+    case 'market-card-drawn':
+      if (msg.card) {
+        showToast(`Market: ${msg.card.name}`, 'warning');
+      }
+      break;
+
+    case 'market-results':
+      // Will be shown in UI
+      render();
+      break;
+
+    case 'employee-dropped':
+      showToast('Employee drop submitted', 'success');
+      break;
+
+    case 'drops-revealed':
+      showToast(`${msg.dropped.length} employees entering secondary pool`, 'warning');
+      break;
+
+    case 'exit-card-drawn':
+      if (msg.card) {
+        showToast(`Exit: ${msg.card.name} (${msg.card.multiplier}x)!`, 'success');
+      }
+      break;
+
     case 'error':
       showToast(msg.message, 'error');
       break;
@@ -396,4 +439,24 @@ export function passBid(): void {
 
 export function advancePhase(): void {
   send({ type: 'advance-phase' });
+}
+
+// Wildcard Actions
+export function selectWildcard(choice: 'double-down' | 'shield' | 'pass'): void {
+  send({ type: 'select-wildcard', choice });
+}
+
+// Market Actions
+export function drawMarket(): void {
+  send({ type: 'draw-market' });
+}
+
+// Secondary Auction Actions
+export function dropEmployeeAction(employeeId: number): void {
+  send({ type: 'drop-employee', employeeId });
+}
+
+// Exit Actions
+export function drawExit(): void {
+  send({ type: 'draw-exit' });
 }

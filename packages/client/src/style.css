@@ -1131,3 +1131,451 @@ input::placeholder, textarea::placeholder {
   font-size: 24px;
   color: var(--accent-success);
 }
+
+/* ===========================================
+   Market Round Phase
+   =========================================== */
+.market-round {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.market-round h2 {
+  margin-bottom: 8px;
+}
+
+.wildcard-phase {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.wildcard-phase h3 {
+  margin-bottom: 16px;
+}
+
+.wildcard-prompt {
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.wildcard-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.wildcard-option {
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.wildcard-option:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+}
+
+.wildcard-option[data-choice="double-down"]:hover {
+  border-color: var(--accent-warning);
+}
+
+.wildcard-option[data-choice="shield"]:hover {
+  border-color: var(--accent-success);
+}
+
+.wildcard-option.pass {
+  opacity: 0.7;
+}
+
+.wildcard-name {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.wildcard-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.wildcard-used-note {
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 16px;
+}
+
+.wildcard-waiting {
+  text-align: center;
+  padding: 24px;
+}
+
+.wildcard-status {
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.wildcard-status-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wildcard-status-item:last-child {
+  border-bottom: none;
+}
+
+.wildcard-status-item .status {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.wildcard-status-item.selected .status {
+  color: var(--accent-success);
+}
+
+.market-draw {
+  text-align: center;
+  padding: 40px;
+}
+
+.market-results {
+  margin-top: 24px;
+}
+
+.market-results h3 {
+  margin-bottom: 16px;
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.result-card {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  border-left: 4px solid var(--team-color, var(--accent-primary));
+}
+
+.result-team {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.result-change {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.result-change.positive {
+  color: var(--accent-success);
+}
+
+.result-change.negative {
+  color: var(--accent-error);
+}
+
+.result-valuation {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.leader-badge {
+  display: inline-block;
+  margin-top: 8px;
+  background: var(--accent-warning);
+  color: #000;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ===========================================
+   Secondary Drop Phase
+   =========================================== */
+.secondary-drop {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.secondary-drop h2 {
+  margin-bottom: 8px;
+}
+
+.drop-selection {
+  margin-bottom: 24px;
+}
+
+.drop-selection h3 {
+  margin-bottom: 16px;
+}
+
+.employee-drop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.employee-drop-card {
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.employee-drop-card:hover {
+  border-color: var(--accent-error);
+}
+
+.employee-drop-card.selected {
+  border-color: var(--accent-error);
+  background: rgba(224, 36, 94, 0.1);
+}
+
+.employee-hired-for {
+  font-size: 12px;
+  color: var(--accent-success);
+  margin-top: 8px;
+}
+
+.drop-complete {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  border: 2px solid var(--accent-success);
+  margin-bottom: 24px;
+}
+
+.drop-status {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.drop-status h3 {
+  margin-bottom: 16px;
+}
+
+.drop-status-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.drop-status-item .status {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.drop-status-item.dropped .status {
+  color: var(--accent-success);
+}
+
+/* ===========================================
+   Secondary Hire Phase
+   =========================================== */
+.secondary-hire {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.secondary-hire h2 {
+  margin-bottom: 8px;
+}
+
+.secondary-complete {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.employee-card.secondary {
+  background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+  border-color: var(--accent-warning);
+}
+
+/* ===========================================
+   Exit Phase
+   =========================================== */
+.exit-phase {
+  max-width: 600px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.exit-phase h2 {
+  margin-bottom: 8px;
+}
+
+.exit-draw {
+  padding: 40px;
+}
+
+.exit-result {
+  padding: 24px;
+}
+
+.exit-card {
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  border: 3px solid var(--accent-warning);
+  border-radius: 20px;
+  padding: 40px;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.exit-type {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--accent-warning);
+}
+
+.exit-multiplier {
+  font-size: 56px;
+  font-weight: 800;
+  color: var(--accent-success);
+  margin-bottom: 16px;
+}
+
+.exit-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ===========================================
+   Winner Phase
+   =========================================== */
+.winner-phase {
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.winner-phase h2 {
+  font-size: 36px;
+  margin-bottom: 32px;
+  background: linear-gradient(135deg, var(--accent-warning), #ff6b6b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.winners {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.winner-card {
+  background: var(--bg-secondary);
+  border-radius: 20px;
+  padding: 32px;
+  border: 3px solid transparent;
+}
+
+.winner-card.founder {
+  border-color: var(--accent-warning);
+}
+
+.winner-card.employer {
+  border-color: var(--accent-success);
+}
+
+.winner-title {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.winner-team {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--team-color, var(--text-primary));
+}
+
+.winner-stat {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--accent-success);
+  margin-bottom: 8px;
+}
+
+.winner-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.final-standings {
+  background: var(--bg-secondary);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 32px;
+}
+
+.final-standings h3 {
+  margin-bottom: 16px;
+}
+
+.standings-list {
+  text-align: left;
+}
+
+.standing-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border-left: 4px solid var(--team-color, var(--accent-primary));
+}
+
+.standing-item .rank {
+  font-weight: 700;
+  color: var(--text-muted);
+  width: 32px;
+}
+
+.standing-item .team-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.standing-item .valuation {
+  font-weight: 700;
+  color: var(--accent-success);
+}
+
+.game-over-actions {
+  margin-top: 24px;
+}

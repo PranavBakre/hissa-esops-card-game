@@ -18,6 +18,10 @@ import {
   lockSetup,
   placeBid,
   advancePhase,
+  selectWildcard,
+  drawMarket,
+  dropEmployeeAction,
+  drawExit,
 } from './app';
 
 // ===========================================
@@ -244,12 +248,20 @@ function renderGame(app: HTMLElement): void {
       break;
     case 'seed':
     case 'early':
-    case 'secondary-drop':
-    case 'secondary-hire':
     case 'mature':
+      content = renderMarketRound();
+      break;
+    case 'secondary-drop':
+      content = renderSecondaryDrop();
+      break;
+    case 'secondary-hire':
+      content = renderSecondaryHire();
+      break;
     case 'exit':
+      content = renderExitPhase();
+      break;
     case 'winner':
-      content = renderPlaceholder(phase);
+      content = renderWinner();
       break;
     default:
       content = '<p>Unknown phase</p>';
@@ -724,14 +736,365 @@ function renderAuctionSummary(): string {
 }
 
 // ===========================================
-// Placeholder for other phases
+// Market Round Phase
 // ===========================================
 
-function renderPlaceholder(phase: Phase): string {
+function renderMarketRound(): string {
+  if (!state.gameState) return '';
+
+  const phase = state.gameState.phase;
+  const phaseName = PHASE_LABELS[phase] || phase;
+  const isWildcardPhase = state.gameState.wildcardPhase;
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+  const hasSelectedWildcard = state.myTeamIndex !== null &&
+    state.gameState.teamWildcardSelections[state.myTeamIndex] !== undefined;
+
   return `
-    <div class="phase-placeholder">
-      <h2>${PHASE_LABELS[phase] || phase}</h2>
-      <p>This phase will be implemented in Phase 4</p>
+    <div class="market-round">
+      <h2>${phaseName} Round</h2>
+      <p class="phase-description">${getMarketPhaseDescription(phase)}</p>
+
+      ${isWildcardPhase ? `
+        <div class="wildcard-phase">
+          <h3>Wildcard Decision</h3>
+          ${myTeam && !hasSelectedWildcard ? `
+            <p class="wildcard-prompt">Choose your wildcard strategy for this round:</p>
+            <div class="wildcard-options">
+              ${!myTeam.wildcardUsed ? `
+                <div class="wildcard-option" data-choice="double-down">
+                  <div class="wildcard-name">Double Down</div>
+                  <div class="wildcard-desc">2x gains AND losses this round</div>
+                </div>
+                <div class="wildcard-option" data-choice="shield">
+                  <div class="wildcard-name">Shield</div>
+                  <div class="wildcard-desc">Immune to losses this round</div>
+                </div>
+              ` : `
+                <p class="wildcard-used-note">You've already used your wildcard in a previous round.</p>
+              `}
+              <div class="wildcard-option pass" data-choice="pass">
+                <div class="wildcard-name">Pass</div>
+                <div class="wildcard-desc">Save wildcard for later</div>
+              </div>
+            </div>
+          ` : myTeam ? `
+            <div class="wildcard-waiting">
+              <p>Your choice submitted. Waiting for other teams...</p>
+            </div>
+          ` : '<p>You are spectating.</p>'}
+
+          <div class="wildcard-status">
+            ${state.gameState.teams.map((team, i) => {
+              const hasSelected = state.gameState?.teamWildcardSelections[i] !== undefined;
+              return `
+                <div class="wildcard-status-item ${hasSelected ? 'selected' : 'pending'}">
+                  <span class="team-dot" style="background: ${team.color}"></span>
+                  <span>${team.name}</span>
+                  <span class="status">${hasSelected ? 'Ready' : 'Deciding...'}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : `
+        <div class="market-draw">
+          ${state.isHost ? `
+            <button class="btn btn-primary btn-large" id="draw-market-btn">
+              Draw Market Card
+            </button>
+          ` : `
+            <p class="summary-note">Waiting for host to draw market card...</p>
+          `}
+        </div>
+      `}
+
+      ${state.gameState.roundPerformance.length > 0 ? `
+        <div class="market-results">
+          <h3>Round Results</h3>
+          <div class="results-grid">
+            ${state.gameState.roundPerformance.map((perf) => {
+              const team = state.gameState?.teams[perf.teamIndex];
+              if (!team) return '';
+              return `
+                <div class="result-card" style="--team-color: ${team.color}">
+                  <div class="result-team">${team.name}</div>
+                  <div class="result-change ${perf.gain >= 0 ? 'positive' : 'negative'}">
+                    ${perf.gain >= 0 ? '+' : ''}${formatCurrency(perf.gain)}
+                  </div>
+                  <div class="result-valuation">${formatCurrency(team.valuation)}</div>
+                  ${team.isMarketLeader ? '<div class="leader-badge">Market Leader</div>' : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          ${state.isHost ? `
+            <div class="summary-actions">
+              <button class="btn btn-primary btn-large" id="advance-phase-btn">
+                Continue
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function getMarketPhaseDescription(phase: string): string {
+  switch (phase) {
+    case 'seed': return 'Seed stage - Early market conditions shape your startup';
+    case 'early': return 'Early stage - Growth pressures intensify';
+    case 'mature': return 'Mature stage - Final market test before exit';
+    default: return 'Market conditions affect your valuation';
+  }
+}
+
+// ===========================================
+// Secondary Drop Phase
+// ===========================================
+
+function renderSecondaryDrop(): string {
+  if (!state.gameState) return '';
+
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+  const hasDropped = state.myTeamIndex !== null &&
+    state.gameState.droppedEmployees.some((d) => d.fromTeamIndex === state.myTeamIndex);
+
+  return `
+    <div class="secondary-drop">
+      <h2>Secondary Market - Drop Phase</h2>
+      <p class="phase-description">Choose an employee to release to the secondary market</p>
+
+      ${myTeam && !myTeam.isDisqualified && !hasDropped ? `
+        <div class="drop-selection">
+          <h3>Select Employee to Drop</h3>
+          <div class="employee-drop-grid">
+            ${myTeam.employees.map((emp) => `
+              <div class="employee-drop-card" data-employee-id="${emp.id}">
+                <div class="employee-category">${emp.category}</div>
+                <div class="employee-name">${emp.name}</div>
+                <div class="employee-role">${emp.role}</div>
+                <div class="employee-hired-for">Hired for ${emp.bidAmount}%</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : myTeam && !myTeam.isDisqualified && hasDropped ? `
+        <div class="drop-complete">
+          <h3>Drop Submitted</h3>
+          <p>Waiting for other teams...</p>
+        </div>
+      ` : '<p>You are spectating or disqualified.</p>'}
+
+      <div class="drop-status">
+        <h3>Drop Status</h3>
+        ${state.gameState.teams.map((team, i) => {
+          const hasDroppedEmp = state.gameState?.droppedEmployees.some((d) => d.fromTeamIndex === i);
+          return team.isDisqualified ? '' : `
+            <div class="drop-status-item ${hasDroppedEmp ? 'dropped' : 'pending'}">
+              <span class="team-dot" style="background: ${team.color}"></span>
+              <span>${team.name}</span>
+              <span class="status">${hasDroppedEmp ? 'Dropped' : 'Selecting...'}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ===========================================
+// Secondary Hire Phase
+// ===========================================
+
+function renderSecondaryHire(): string {
+  if (!state.gameState) return '';
+
+  const pool = state.gameState.secondaryPool;
+  const currentCard = pool[state.gameState.currentCardIndex];
+  const currentBid = state.gameState.currentBid;
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+
+  if (!currentCard) {
+    return `
+      <div class="secondary-complete">
+        <h2>Secondary Market Complete</h2>
+        <p>All employees have been placed.</p>
+        ${state.isHost ? `
+          <div class="summary-actions">
+            <button class="btn btn-primary btn-large" id="advance-phase-btn">
+              Continue to Mature Round
+            </button>
+          </div>
+        ` : `
+          <p class="summary-note">Waiting for host to continue...</p>
+        `}
+      </div>
+    `;
+  }
+
+  const canBid = myTeam && !myTeam.isDisqualified && myTeam.esopRemaining > 0;
+  const minBid = currentBid ? currentBid.amount + 1 : 1;
+
+  return `
+    <div class="secondary-hire">
+      <h2>Secondary Market - Hiring</h2>
+      <p class="phase-description">Bid on employees from the secondary pool</p>
+
+      <div class="auction-card">
+        <div class="employee-card secondary">
+          <div class="employee-category">${currentCard.category}</div>
+          <div class="employee-name">${currentCard.name}</div>
+          <div class="employee-role">${currentCard.role}</div>
+          <div class="employee-stats">
+            <div class="stat">
+              <span class="stat-label">Hard Skill</span>
+              <span class="stat-value">${(currentCard.hardSkill * 100).toFixed(0)}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bid-status">
+        ${currentBid ? `
+          <div class="current-bid">
+            <span>Current Bid:</span>
+            <strong>${currentBid.amount}% ESOP</strong>
+            <span>by ${state.gameState.teams[currentBid.teamIndex].name}</span>
+          </div>
+        ` : `
+          <div class="no-bid">No bids yet</div>
+        `}
+      </div>
+
+      ${canBid ? `
+        <div class="bid-controls">
+          <div class="bid-input-group">
+            <button class="btn btn-secondary" id="bid-decrease">-</button>
+            <input type="number" id="bid-amount" value="${minBid}" min="${minBid}" max="${myTeam.esopRemaining}">
+            <button class="btn btn-secondary" id="bid-increase">+</button>
+          </div>
+          <div class="bid-buttons">
+            <button class="btn btn-primary" id="place-bid-btn">
+              Place Bid
+            </button>
+          </div>
+          <div class="esop-remaining">
+            Your ESOP: ${myTeam.esopRemaining}% remaining
+          </div>
+        </div>
+      ` : '<p>You cannot bid in this round.</p>'}
+
+      <div class="auction-progress">
+        Card ${state.gameState.currentCardIndex + 1} of ${pool.length}
+      </div>
+    </div>
+  `;
+}
+
+// ===========================================
+// Exit Phase
+// ===========================================
+
+function renderExitPhase(): string {
+  if (!state.gameState) return '';
+
+  const exitCard = state.gameState.exitCard;
+
+  return `
+    <div class="exit-phase">
+      <h2>Exit Phase</h2>
+      <p class="phase-description">Time to exit! Draw the exit card to determine your multiplier.</p>
+
+      ${!exitCard ? `
+        ${state.isHost ? `
+          <div class="exit-draw">
+            <button class="btn btn-primary btn-large" id="draw-exit-btn">
+              Draw Exit Card
+            </button>
+          </div>
+        ` : `
+          <p class="summary-note">Waiting for host to draw exit card...</p>
+        `}
+      ` : `
+        <div class="exit-result">
+          <div class="exit-card">
+            <div class="exit-type">${exitCard.name}</div>
+            <div class="exit-multiplier">${exitCard.multiplier}x</div>
+            <div class="exit-desc">${exitCard.description}</div>
+          </div>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ===========================================
+// Winner Phase
+// ===========================================
+
+function renderWinner(): string {
+  if (!state.gameState) return '';
+
+  const teams = [...state.gameState.teams]
+    .filter((t) => !t.isDisqualified)
+    .sort((a, b) => b.valuation - a.valuation);
+
+  // Best Founder: Highest valuation
+  const founder = teams[0];
+
+  // Best Employer: Most ESOP given
+  const employer = teams.reduce((best, team) => {
+    const teamEsop = team.employees.reduce((sum, e) => sum + e.bidAmount, 0);
+    const bestEsop = best.employees.reduce((sum, e) => sum + e.bidAmount, 0);
+    return teamEsop > bestEsop ? team : best;
+  });
+
+  return `
+    <div class="winner-phase">
+      <h2>Game Over!</h2>
+
+      <div class="winners">
+        <div class="winner-card founder">
+          <div class="winner-title">Best Founder</div>
+          <div class="winner-team" style="--team-color: ${founder.color}">
+            ${founder.name}
+          </div>
+          <div class="winner-stat">${formatCurrency(founder.valuation)}</div>
+          <div class="winner-desc">Highest final valuation</div>
+        </div>
+
+        <div class="winner-card employer">
+          <div class="winner-title">Best Employer</div>
+          <div class="winner-team" style="--team-color: ${employer.color}">
+            ${employer.name}
+          </div>
+          <div class="winner-stat">
+            ${employer.employees.reduce((sum, e) => sum + e.bidAmount, 0)}% ESOP
+          </div>
+          <div class="winner-desc">Most ESOP given to employees</div>
+        </div>
+      </div>
+
+      <div class="final-standings">
+        <h3>Final Standings</h3>
+        <div class="standings-list">
+          ${teams.map((team, index) => `
+            <div class="standing-item" style="--team-color: ${team.color}">
+              <span class="rank">#${index + 1}</span>
+              <span class="team-name">${team.name}</span>
+              <span class="valuation">${formatCurrency(team.valuation)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="game-over-actions">
+        <button class="btn btn-secondary" onclick="location.reload()">
+          Play Again
+        </button>
+      </div>
     </div>
   `;
 }
@@ -741,6 +1104,12 @@ function renderPlaceholder(phase: Phase): string {
 // ===========================================
 
 function attachPhaseEventListeners(phase: Phase): void {
+  // Check for wildcard phase first (applies to seed, early, mature)
+  if (state.gameState?.wildcardPhase) {
+    attachWildcardListeners();
+    return;
+  }
+
   switch (phase) {
     case 'registration':
       attachRegistrationListeners();
@@ -757,6 +1126,20 @@ function attachPhaseEventListeners(phase: Phase): void {
       break;
     case 'auction':
       attachAuctionListeners();
+      break;
+    case 'seed':
+    case 'early':
+    case 'mature':
+      attachMarketListeners();
+      break;
+    case 'secondary-drop':
+      attachSecondaryDropListeners();
+      break;
+    case 'secondary-hire':
+      attachAuctionListeners(); // Same as regular auction
+      break;
+    case 'exit':
+      attachExitListeners();
       break;
   }
 }
@@ -891,6 +1274,57 @@ function attachAuctionListeners(): void {
     if (e.key === 'Enter') {
       document.getElementById('place-bid-btn')?.click();
     }
+  });
+}
+
+function attachWildcardListeners(): void {
+  document.querySelectorAll('.wildcard-option').forEach((option) => {
+    option.addEventListener('click', () => {
+      const choice = option.getAttribute('data-choice');
+      if (choice === 'double-down' || choice === 'shield' || choice === 'pass') {
+        selectWildcard(choice);
+      }
+    });
+  });
+}
+
+function attachMarketListeners(): void {
+  // Draw market button
+  document.getElementById('draw-market-btn')?.addEventListener('click', () => {
+    drawMarket();
+  });
+
+  // Advance phase button (after results shown)
+  document.getElementById('advance-phase-btn')?.addEventListener('click', () => {
+    advancePhase();
+  });
+}
+
+function attachSecondaryDropListeners(): void {
+  document.querySelectorAll('.employee-drop-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      const employeeId = card.getAttribute('data-employee-id');
+      if (employeeId) {
+        // Add visual selection before confirming
+        document.querySelectorAll('.employee-drop-card').forEach((c) => {
+          c.classList.remove('selected');
+        });
+        card.classList.add('selected');
+
+        // Confirm and drop
+        if (confirm('Drop this employee to the secondary market?')) {
+          dropEmployeeAction(parseInt(employeeId, 10));
+        } else {
+          card.classList.remove('selected');
+        }
+      }
+    });
+  });
+}
+
+function attachExitListeners(): void {
+  document.getElementById('draw-exit-btn')?.addEventListener('click', () => {
+    drawExit();
   });
 }
 
