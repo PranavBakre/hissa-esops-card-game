@@ -1,0 +1,587 @@
+/* ===========================================
+   ESOP Wars v2 - Client Styles
+   =========================================== */
+
+/* ===========================================
+   Variables
+   =========================================== */
+:root {
+  --bg-primary: #0f1419;
+  --bg-secondary: #192734;
+  --bg-tertiary: #22303c;
+  --text-primary: #ffffff;
+  --text-secondary: #8899a6;
+  --text-muted: #657786;
+  --accent-primary: #1da1f2;
+  --accent-success: #17bf63;
+  --accent-warning: #ffad1f;
+  --accent-error: #e0245e;
+  --border-color: #38444d;
+  --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* ===========================================
+   Reset & Base
+   =========================================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===========================================
+   Buttons
+   =========================================== */
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1991db;
+}
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-secondary);
+}
+
+.btn-text {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-text:hover {
+  color: var(--text-primary);
+}
+
+.btn-large {
+  padding: 16px 32px;
+  font-size: 18px;
+}
+
+/* ===========================================
+   Inputs
+   =========================================== */
+input, textarea {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 16px;
+  color: var(--text-primary);
+  width: 100%;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* ===========================================
+   Home Screen
+   =========================================== */
+.home-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.game-title {
+  font-size: 48px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--accent-primary), #ff6b6b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.game-subtitle {
+  color: var(--text-secondary);
+  margin-bottom: 40px;
+}
+
+.home-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.join-room-form {
+  display: flex;
+  gap: 8px;
+}
+
+.input-room-code {
+  font-family: monospace;
+  font-size: 20px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  flex: 1;
+}
+
+/* ===========================================
+   Lobby Screen
+   =========================================== */
+.lobby-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.lobby-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.lobby-header h2 {
+  font-family: monospace;
+  letter-spacing: 2px;
+}
+
+.lobby-content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 600px) {
+  .lobby-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+.team-selection h3,
+.players-panel h3 {
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+}
+
+.team-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.team-slot {
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.team-slot:hover:not(.taken) {
+  border-color: var(--team-color, var(--accent-primary));
+}
+
+.team-slot.selected {
+  border-color: var(--team-color, var(--accent-primary));
+  background: var(--bg-tertiary);
+}
+
+.team-slot.taken {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.team-color-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--team-color, var(--accent-primary));
+}
+
+.team-slot .team-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.team-slot .team-player {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.team-slot .team-action {
+  font-size: 12px;
+  color: var(--accent-primary);
+  margin-top: 8px;
+}
+
+.players-panel {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.player-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.player-item.disconnected {
+  opacity: 0.5;
+}
+
+.player-name {
+  flex: 1;
+}
+
+.host-badge {
+  background: var(--accent-warning);
+  color: #000;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-badge {
+  background: var(--text-muted);
+  color: var(--bg-primary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.lobby-footer {
+  text-align: center;
+  padding-top: 24px;
+}
+
+.lobby-hint {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-top: 12px;
+}
+
+/* ===========================================
+   Game Screen
+   =========================================== */
+.game-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.phase-bar {
+  display: flex;
+  background: var(--bg-secondary);
+  padding: 12px 20px;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.phase-item {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.phase-item.active {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.phase-item.completed {
+  color: var(--accent-success);
+}
+
+.game-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  flex: 1;
+}
+
+@media (max-width: 768px) {
+  .game-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .teams-sidebar {
+    display: none;
+  }
+}
+
+/* ===========================================
+   Teams Sidebar
+   =========================================== */
+.teams-sidebar {
+  background: var(--bg-secondary);
+  padding: 20px;
+  border-right: 1px solid var(--border-color);
+}
+
+.teams-sidebar h3 {
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+}
+
+.sidebar-team {
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-left: 4px solid var(--team-color, var(--accent-primary));
+}
+
+.sidebar-team.my-team {
+  border: 1px solid var(--team-color, var(--accent-primary));
+}
+
+.sidebar-team.disqualified {
+  opacity: 0.5;
+}
+
+.sidebar-team-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sidebar-team .team-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.bot-badge {
+  background: var(--text-muted);
+  color: var(--bg-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.team-valuation {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent-success);
+}
+
+.team-esop,
+.team-employees {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ===========================================
+   Game Main
+   =========================================== */
+.game-main {
+  padding: 24px;
+  overflow-y: auto;
+}
+
+/* ===========================================
+   Registration Phase
+   =========================================== */
+.registration-phase {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.registration-phase h2 {
+  margin-bottom: 8px;
+}
+
+.phase-description {
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.registration-form {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.registration-complete {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  margin-bottom: 24px;
+  border: 2px solid var(--accent-success);
+}
+
+.registration-complete h3 {
+  color: var(--accent-success);
+  margin-bottom: 12px;
+}
+
+.registration-status h3 {
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+}
+
+.registration-team {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.team-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.registration-team .team-name {
+  flex: 1;
+}
+
+.registration-badge {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.registration-team.registered .registration-badge {
+  background: var(--accent-success);
+  color: white;
+}
+
+.registration-team.pending .registration-badge {
+  background: var(--text-muted);
+  color: var(--bg-primary);
+}
+
+/* ===========================================
+   Phase Placeholder
+   =========================================== */
+.phase-placeholder {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.phase-placeholder h2 {
+  margin-bottom: 16px;
+}
+
+.phase-placeholder p {
+  color: var(--text-secondary);
+}
+
+/* ===========================================
+   Toast Notifications
+   =========================================== */
+#toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  transform: translateX(120%);
+  transition: transform 0.3s ease;
+  max-width: 300px;
+}
+
+.toast.show {
+  transform: translateX(0);
+}
+
+.toast-success {
+  background: var(--accent-success);
+  color: white;
+}
+
+.toast-error {
+  background: var(--accent-error);
+  color: white;
+}
+
+.toast-warning {
+  background: var(--accent-warning);
+  color: #000;
+}
