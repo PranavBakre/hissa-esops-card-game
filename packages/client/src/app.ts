@@ -293,6 +293,16 @@ function handleMessage(msg: ServerMessage): void {
       }
       break;
 
+    case 'bidding-closed':
+      if (state.gameState && msg.winner) {
+        const winnerTeam = state.gameState.teams[msg.winner.teamIndex];
+        showToast(`${winnerTeam.name} won ${msg.card.name} for ${msg.winner.amount}% ESOP`, 'success');
+      } else if (msg.card) {
+        showToast(`No bids for ${msg.card.name}`, 'warning');
+      }
+      // game-state message follows, which will re-render
+      break;
+
     case 'error':
       showToast(msg.message, 'error');
       break;
@@ -382,4 +392,8 @@ export function placeBid(amount: number): void {
 
 export function passBid(): void {
   send({ type: 'pass-bid' });
+}
+
+export function advancePhase(): void {
+  send({ type: 'advance-phase' });
 }

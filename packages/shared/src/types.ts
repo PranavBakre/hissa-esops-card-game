@@ -251,6 +251,7 @@ export type ClientMessage =
   | { type: 'lock-setup'; segmentId: number; ideaId: number }
   | { type: 'place-bid'; amount: number }
   | { type: 'pass-bid' }
+  | { type: 'advance-phase' }
   | { type: 'select-wildcard'; choice: WildcardChoice }
   | { type: 'draw-market' }
   | { type: 'drop-employee'; employeeId: number }

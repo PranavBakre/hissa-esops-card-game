@@ -891,6 +891,67 @@ input::placeholder, textarea::placeholder {
   font-style: italic;
 }
 
+.summary-actions {
+  text-align: center;
+  margin-top: 32px;
+}
+
+/* ===========================================
+   Auction Summary Phase
+   =========================================== */
+.auction-summary {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.auction-summary h2 {
+  margin-bottom: 8px;
+}
+
+.team-summary.disqualified {
+  opacity: 0.6;
+}
+
+.disqualified-badge {
+  background: var(--accent-error);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.employees-list {
+  margin-bottom: 12px;
+}
+
+.employee-mini {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.emp-name {
+  font-weight: 500;
+}
+
+.emp-cost {
+  color: var(--accent-success);
+  font-weight: 600;
+}
+
+.team-stats {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
 /* ===========================================
    Auction Phase
    =========================================== */

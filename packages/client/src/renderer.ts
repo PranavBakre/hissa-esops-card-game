@@ -17,6 +17,7 @@ import {
   skipDraw,
   lockSetup,
   placeBid,
+  advancePhase,
 } from './app';
 
 // ===========================================
@@ -239,6 +240,8 @@ function renderGame(app: HTMLElement): void {
       content = renderAuction();
       break;
     case 'auction-summary':
+      content = renderAuctionSummary();
+      break;
     case 'seed':
     case 'early':
     case 'secondary-drop':
@@ -573,7 +576,15 @@ function renderSetupSummary(): string {
         `).join('')}
       </div>
 
-      <p class="summary-note">The auction will begin shortly...</p>
+      ${state.isHost ? `
+        <div class="summary-actions">
+          <button class="btn btn-primary btn-large" id="advance-phase-btn">
+            Continue to Auction
+          </button>
+        </div>
+      ` : `
+        <p class="summary-note">Waiting for host to continue...</p>
+      `}
     </div>
   `;
 }
@@ -668,6 +679,50 @@ function renderAuction(): string {
   `;
 }
 
+function renderAuctionSummary(): string {
+  if (!state.gameState) return '';
+
+  return `
+    <div class="auction-summary">
+      <h2>Auction Complete</h2>
+      <p class="phase-description">Review hired employees before market rounds</p>
+
+      <div class="summary-grid">
+        ${state.gameState.teams.map((team) => `
+          <div class="team-summary ${team.isDisqualified ? 'disqualified' : ''}" style="--team-color: ${team.color}">
+            <div class="team-header">${team.name}</div>
+            ${team.isDisqualified ? `
+              <div class="disqualified-badge">Disqualified</div>
+            ` : `
+              <div class="employees-list">
+                ${team.employees.map((emp) => `
+                  <div class="employee-mini">
+                    <span class="emp-name">${emp.name}</span>
+                    <span class="emp-cost">${emp.bidAmount}%</span>
+                  </div>
+                `).join('')}
+              </div>
+              <div class="team-stats">
+                <span>ESOP Remaining: ${team.esopRemaining}%</span>
+              </div>
+            `}
+          </div>
+        `).join('')}
+      </div>
+
+      ${state.isHost ? `
+        <div class="summary-actions">
+          <button class="btn btn-primary btn-large" id="advance-phase-btn">
+            Start Market Rounds
+          </button>
+        </div>
+      ` : `
+        <p class="summary-note">Waiting for host to continue...</p>
+      `}
+    </div>
+  `;
+}
+
 // ===========================================
 // Placeholder for other phases
 // ===========================================
@@ -696,10 +751,20 @@ function attachPhaseEventListeners(phase: Phase): void {
     case 'setup-lock':
       attachSetupLockListeners();
       break;
+    case 'setup-summary':
+    case 'auction-summary':
+      attachSummaryListeners();
+      break;
     case 'auction':
       attachAuctionListeners();
       break;
   }
+}
+
+function attachSummaryListeners(): void {
+  document.getElementById('advance-phase-btn')?.addEventListener('click', () => {
+    advancePhase();
+  });
 }
 
 function attachRegistrationListeners(): void {

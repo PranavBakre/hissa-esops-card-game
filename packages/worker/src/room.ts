@@ -229,6 +229,10 @@ export class GameRoom {
         this.handlePlaceBid(ws, session, msg.amount);
         break;
 
+      case 'advance-phase':
+        this.handleAdvancePhase(ws, session);
+        break;
+
       case 'pass-bid':
         // No action needed for pass, just acknowledge
         break;
@@ -435,6 +439,42 @@ export class GameRoom {
 
     // Check if registration complete
     this.checkPhaseCompletion();
+  }
+
+  // ===========================================
+  // Phase Advance Handler
+  // ===========================================
+
+  private handleAdvancePhase(ws: WebSocket, session: SessionData): void {
+    if (!this.roomState?.gameState) return;
+
+    if (!session.isHost) {
+      this.send(ws, { type: 'error', message: 'Only host can advance phase' });
+      return;
+    }
+
+    const phase = this.roomState.gameState.phase;
+    const manualAdvancePhases = ['setup-summary', 'auction-summary'];
+
+    if (!manualAdvancePhases.includes(phase)) {
+      this.send(ws, { type: 'error', message: 'Cannot manually advance this phase' });
+      return;
+    }
+
+    this.roomState.gameState = advancePhase(this.roomState.gameState);
+
+    this.broadcast({
+      type: 'phase-changed',
+      phase: this.roomState.gameState.phase,
+    });
+
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    // Start bot actions for new phase if needed
+    this.scheduleBotTurnIfNeeded();
   }
 
   // ===========================================
