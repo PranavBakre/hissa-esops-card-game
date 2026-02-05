@@ -147,8 +147,10 @@ function connect(roomCode: string, isReconnect: boolean): void {
   }
 
   const ws = new WebSocket(`${WS_URL}/api/rooms/${roomCode}/ws`);
+  let connectionOpened = false;
 
   ws.onopen = () => {
+    connectionOpened = true;
     state.ws = ws;
     state.connected = true;
 
@@ -176,7 +178,15 @@ function connect(roomCode: string, isReconnect: boolean): void {
     state.connected = false;
     state.ws = null;
 
-    // Attempt reconnection after delay
+    // If connection never opened, room likely doesn't exist
+    if (!connectionOpened) {
+      showToast('Room not found', 'error');
+      clearSession();
+      render();
+      return;
+    }
+
+    // Attempt reconnection after delay for normal disconnects
     if (state.roomCode) {
       showToast('Disconnected. Reconnecting...', 'warning');
       setTimeout(() => {
@@ -189,8 +199,21 @@ function connect(roomCode: string, isReconnect: boolean): void {
 
   ws.onerror = (error) => {
     console.error('WebSocket error:', error);
-    showToast('Connection error', 'error');
+    // Don't show toast here - onclose will handle it
   };
+}
+
+function clearSession(): void {
+  localStorage.removeItem('esop-wars-playerId');
+  localStorage.removeItem('esop-wars-roomCode');
+
+  state.playerId = null;
+  state.roomCode = null;
+  state.myTeamIndex = null;
+  state.isHost = false;
+  state.room = null;
+  state.gameState = null;
+  state.view = 'home';
 }
 
 export function send(message: ClientMessage): void {
@@ -396,18 +419,8 @@ export function leaveRoom(): void {
     state.ws.close();
   }
 
-  localStorage.removeItem('esop-wars-playerId');
-  localStorage.removeItem('esop-wars-roomCode');
-
-  state.playerId = null;
-  state.roomCode = null;
-  state.myTeamIndex = null;
-  state.isHost = false;
-  state.room = null;
-  state.gameState = null;
   state.connected = false;
-  state.view = 'home';
-
+  clearSession();
   render();
 }
 

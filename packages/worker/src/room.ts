@@ -103,12 +103,31 @@ export class GameRoom {
   private state: DurableObjectState;
   private sessions: Map<WebSocket, SessionData> = new Map();
   private roomState: RoomState | null = null;
+  private initialized: boolean = false;
 
   constructor(state: DurableObjectState) {
     this.state = state;
   }
 
+  private async loadState(): Promise<void> {
+    if (this.initialized) return;
+    this.initialized = true;
+    const stored = await this.state.storage.get<RoomState>('roomState');
+    if (stored) {
+      this.roomState = stored;
+    }
+  }
+
+  private async saveState(): Promise<void> {
+    if (this.roomState) {
+      await this.state.storage.put('roomState', this.roomState);
+    }
+  }
+
   async fetch(request: Request): Promise<Response> {
+    // Load state from storage on first access
+    await this.loadState();
+
     const url = new URL(request.url);
 
     // Initialize room
@@ -126,6 +145,7 @@ export class GameRoom {
         players: [],
         gameState: null,
       };
+      await this.saveState();
       return new Response('OK');
     }
 
@@ -148,6 +168,11 @@ export class GameRoom {
 
     // WebSocket upgrade
     if (request.headers.get('Upgrade') === 'websocket') {
+      // Check if room is initialized before accepting WebSocket
+      if (!this.roomState) {
+        return new Response('Room not found', { status: 404 });
+      }
+
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
 
@@ -199,7 +224,7 @@ export class GameRoom {
     });
   }
 
-  private handleMessage(ws: WebSocket, msg: ClientMessage): void {
+  private async handleMessage(ws: WebSocket, msg: ClientMessage): Promise<void> {
     if (!this.roomState) {
       this.send(ws, { type: 'error', message: 'Room not initialized' });
       return;
@@ -277,6 +302,9 @@ export class GameRoom {
         this.send(ws, { type: 'error', message: `Unknown message type: ${unhandledMsg.type}` });
       }
     }
+
+    // Persist state after any message that may have modified it
+    await this.saveState();
   }
 
   private handleJoin(ws: WebSocket, session: SessionData, playerName: string): void {
@@ -1024,7 +1052,7 @@ export class GameRoom {
     }
   }
 
-  private handleClose(ws: WebSocket): void {
+  private async handleClose(ws: WebSocket): Promise<void> {
     const session = this.sessions.get(ws);
     if (session && this.roomState) {
       const player = this.roomState.players.find((p) => p.playerId === session.playerId);
@@ -1035,6 +1063,9 @@ export class GameRoom {
           type: 'player-left',
           playerId: session.playerId,
         });
+
+        // Persist state after marking player disconnected
+        await this.saveState();
       }
     }
     this.sessions.delete(ws);
@@ -1073,6 +1104,9 @@ export class GameRoom {
   }
 
   async alarm(): Promise<void> {
+    // Load state in case DO hibernated
+    await this.loadState();
+
     if (!this.roomState?.gameState) return;
 
     const phase = this.roomState.gameState.phase;
@@ -1088,6 +1122,9 @@ export class GameRoom {
     } else if (phase === 'secondary-drop') {
       this.executeBotDrop();
     }
+
+    // Persist state after bot actions
+    await this.saveState();
   }
 
   private executeBotSetupTurn(): void {
