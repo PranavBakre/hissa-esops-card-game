@@ -1467,6 +1467,7 @@ input::placeholder, textarea::placeholder {
   box-shadow: var(--shadow-card);
   position: relative;
   overflow: hidden;
+  margin-bottom: 24px;
 }
 
 .employee-card::before {
@@ -3222,9 +3223,46 @@ input::placeholder, textarea::placeholder {
     font-size: 11px;
   }
 
+  /* Two-line header in spectator mode: speed controls on second row */
+  .game-header {
+    flex-wrap: wrap;
+  }
+
+  .header-right {
+    display: contents;
+  }
+
+  .speed-controls {
+    width: 100%;
+    justify-content: center;
+    order: 10;
+    margin: 6px -12px 0;
+    padding: 6px 12px 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .spectator-badge {
+    display: none;
+  }
+
   /* Mobile team strip */
   .mobile-team-strip {
     display: flex !important;
+  }
+
+  /* Prevent full-page scroll: constrain game to viewport */
+  .game-screen {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  .game-layout {
+    min-height: 0;
+  }
+
+  .game-main {
+    min-height: 0;
   }
 
   /* Phase intro compact */
