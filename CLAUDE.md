@@ -41,6 +41,7 @@ ESOP Wars is a multiplayer card game where 5 teams compete to build the highest-
 
 - **No type assertions** - Never use `as` keyword or type assertions in TypeScript. Use proper typing, type guards, or generics instead.
 - **Docs first, code second** - When building something new, write the documentation first, get user approval, then implement.
+- **Start narrow, go broad** - Start with narrow reads of the documentation first. Only use broad exploration agents if narrow searches fail.
 
 ## Development
 
