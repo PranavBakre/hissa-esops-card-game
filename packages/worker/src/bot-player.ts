@@ -23,8 +23,9 @@ export const BOT_TIMING = {
   LOCK_STAGGER_MS: 300,
 };
 
-export function getBotDelay(): number {
-  return BOT_TIMING.MIN_DELAY_MS + Math.random() * (BOT_TIMING.MAX_DELAY_MS - BOT_TIMING.MIN_DELAY_MS);
+export function getBotDelay(speedMultiplier: number = 1.0): number {
+  const base = BOT_TIMING.MIN_DELAY_MS + Math.random() * (BOT_TIMING.MAX_DELAY_MS - BOT_TIMING.MIN_DELAY_MS);
+  return Math.max(10, Math.round(base * speedMultiplier));
 }
 
 // ===========================================

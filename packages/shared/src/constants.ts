@@ -2,7 +2,7 @@
 // ESOP Wars v2 - Shared Constants
 // ===========================================
 
-import type { Phase, EmployeeCategory } from './types';
+import type { Phase, EmployeeCategory, GameSpeed } from './types';
 
 // ===========================================
 // Game Phases
@@ -51,6 +51,8 @@ export const CLIENT_MESSAGE_TYPES = [
   'reconnect',
   'select-team',
   'start-game',
+  'start-bot-game',
+  'set-game-speed',
   'register-team',
   'drop-card',
   'draw-card',
@@ -104,6 +106,16 @@ export const TIMING = {
 
   // Room cleanup
   ROOM_INACTIVE_CLEANUP_MS: 60 * 60 * 1000, // 1 hour
+};
+
+// ===========================================
+// Speed Multipliers (for spectator mode)
+// ===========================================
+
+export const SPEED_MULTIPLIERS: Record<GameSpeed, number> = {
+  normal: 1.0,
+  fast: 0.3,
+  instant: 0.01,
 };
 
 // ===========================================

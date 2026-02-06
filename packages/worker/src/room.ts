@@ -9,8 +9,9 @@ import type {
   ServerMessage,
   TeamConfig,
   PlayerRole,
+  GameSpeed,
 } from '@esop-wars/shared';
-import { TEAM_DEFINITIONS, GAME, TIMING } from '@esop-wars/shared';
+import { TEAM_DEFINITIONS, GAME, TIMING, SPEED_MULTIPLIERS } from '@esop-wars/shared';
 import {
   createInitialState,
   registerTeam,
@@ -29,6 +30,7 @@ import {
   drawMarketCard,
   applyMarketEffects,
   applyMarketLeaderBonus,
+  applyWildcardModifiers,
   dropEmployee,
   allEmployeesDropped,
   populateSecondaryPool,
@@ -147,6 +149,8 @@ export class GameRoom {
         createdAt: Date.now(),
         players: [],
         gameState: null,
+        spectatorMode: false,
+        gameSpeed: 'normal',
       };
       await this.saveState();
       return new Response('OK');
@@ -299,6 +303,14 @@ export class GameRoom {
 
       case 'select-exit':
         this.handleSelectExit(ws, session, msg.exitId);
+        break;
+
+      case 'start-bot-game':
+        this.handleStartBotGame(ws, session);
+        break;
+
+      case 'set-game-speed':
+        this.handleSetGameSpeed(ws, session, msg.speed);
         break;
 
       default: {
@@ -462,6 +474,64 @@ export class GameRoom {
 
     // Auto-register bots
     this.autoRegisterBots();
+  }
+
+  private handleStartBotGame(ws: WebSocket, session: SessionData): void {
+    if (!this.roomState) return;
+
+    if (!session.isHost) {
+      this.send(ws, { type: 'error', message: 'Only host can start a bot game' });
+      return;
+    }
+
+    if (this.roomState.status !== 'LOBBY') {
+      this.send(ws, { type: 'error', message: 'Game already started' });
+      return;
+    }
+
+    // Set spectator mode
+    this.roomState.spectatorMode = true;
+
+    // Build team config - all 5 teams are bots
+    const teamConfigs: TeamConfig[] = TEAM_DEFINITIONS.map((def) => ({
+      name: def.name,
+      color: def.color,
+      playerId: null,
+      isBot: true,
+    }));
+
+    // Create initial game state
+    this.roomState.gameState = createInitialState({
+      teams: teamConfigs,
+      initialValuation: GAME.INITIAL_VALUATION,
+      initialEsop: GAME.INITIAL_ESOP,
+    });
+    this.roomState.status = 'PLAYING';
+
+    // Broadcast game state to all
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    // Auto-register bots
+    this.autoRegisterBots();
+  }
+
+  private handleSetGameSpeed(ws: WebSocket, session: SessionData, speed: GameSpeed): void {
+    if (!this.roomState) return;
+
+    if (!session.isHost) {
+      this.send(ws, { type: 'error', message: 'Only host can change game speed' });
+      return;
+    }
+
+    this.roomState.gameSpeed = speed;
+  }
+
+  private getSpeedMultiplier(): number {
+    if (!this.roomState) return 1.0;
+    return SPEED_MULTIPLIERS[this.roomState.gameSpeed];
   }
 
   private handleRegisterTeam(
@@ -721,15 +791,18 @@ export class GameRoom {
 
     // Check if all selections are in
     if (allWildcardsSelected(this.roomState.gameState)) {
-      this.revealWildcardsAndDrawMarket();
+      this.revealAndApplyWildcards();
     }
   }
 
-  private revealWildcardsAndDrawMarket(): void {
+  private revealAndApplyWildcards(): void {
     if (!this.roomState?.gameState) return;
 
-    // Apply wildcards
+    // Apply wildcards (marks which teams used wildcards, exits wildcard phase)
     this.roomState.gameState = applyWildcards(this.roomState.gameState);
+
+    // Apply wildcard modifiers to this round's results
+    this.roomState.gameState = applyWildcardModifiers(this.roomState.gameState);
 
     // Broadcast wildcard reveals
     this.broadcast({
@@ -737,11 +810,20 @@ export class GameRoom {
       selections: this.roomState.gameState.teams.map((t) => t.wildcardActiveThisRound),
     });
 
-    // Broadcast updated state
+    // Broadcast updated results with wildcard modifications
+    this.broadcast({
+      type: 'market-results',
+      performance: this.roomState.gameState.roundPerformance,
+      teams: this.roomState.gameState.teams,
+    });
+
     this.broadcast({
       type: 'game-state',
       state: this.roomState.gameState,
     });
+
+    // Phase is now complete (wildcardPhase=false, roundPerformance populated)
+    this.checkPhaseCompletion();
   }
 
   // ===========================================
@@ -776,20 +858,24 @@ export class GameRoom {
     // Apply market leader bonus
     this.roomState.gameState = applyMarketLeaderBonus(this.roomState.gameState);
 
-    // Broadcast results
+    // Broadcast results (teams can now see their valuations before wildcard decision)
     this.broadcast({
       type: 'market-results',
       performance: this.roomState.gameState.roundPerformance,
       teams: this.roomState.gameState.teams,
     });
 
+    // Enter wildcard phase — players now react to market results
+    this.roomState.gameState.wildcardPhase = true;
+    this.roomState.gameState.teamWildcardSelections = {};
+
     this.broadcast({
       type: 'game-state',
       state: this.roomState.gameState,
     });
 
-    // Advance phase
-    this.checkPhaseCompletion();
+    // Schedule bot wildcards if needed
+    this.scheduleBotTurnIfNeeded();
   }
 
   // ===========================================
@@ -927,12 +1013,14 @@ export class GameRoom {
 
     const phase = this.roomState.gameState.phase;
 
+    const multiplier = this.getSpeedMultiplier();
+
     if (phase === 'setup') {
       const currentTurn = this.roomState.gameState.setupDraftTurn;
       const team = this.roomState.gameState.teams[currentTurn];
 
       if (team.isBot) {
-        this.scheduleAlarm(getBotDelay());
+        this.scheduleAlarm(getBotDelay(multiplier));
       }
     } else if (phase === 'setup-lock') {
       // Schedule bot locks
@@ -961,7 +1049,7 @@ export class GameRoom {
       .filter(({ team }) => team.isBot && team.lockedSegment === null);
 
     if (botsNeedingLock.length > 0) {
-      this.scheduleAlarm(getBotDelay());
+      this.scheduleAlarm(getBotDelay(this.getSpeedMultiplier()));
     }
   }
 
@@ -980,7 +1068,8 @@ export class GameRoom {
       );
 
     if (eligibleBots.length > 0) {
-      this.scheduleAlarm(BOT_TIMING.BID_DELAY_MS);
+      const multiplier = this.getSpeedMultiplier();
+      this.scheduleAlarm(Math.max(10, Math.round(BOT_TIMING.BID_DELAY_MS * multiplier)));
     }
   }
 
@@ -997,7 +1086,7 @@ export class GameRoom {
       );
 
     if (botsNeedingSelection.length > 0) {
-      this.scheduleAlarm(getBotDelay());
+      this.scheduleAlarm(getBotDelay(this.getSpeedMultiplier()));
     }
   }
 
@@ -1014,7 +1103,7 @@ export class GameRoom {
       );
 
     if (botsNeedingDrop.length > 0) {
-      this.scheduleAlarm(getBotDelay());
+      this.scheduleAlarm(getBotDelay(this.getSpeedMultiplier()));
     }
   }
 
@@ -1031,12 +1120,13 @@ export class GameRoom {
       );
 
     if (botsNeedingExit.length > 0) {
-      this.scheduleAlarm(getBotDelay());
+      this.scheduleAlarm(getBotDelay(this.getSpeedMultiplier()));
     }
   }
 
   private scheduleAuctionTimeout(): void {
-    this.scheduleAlarm(TIMING.BID_TIMEOUT_MS);
+    const multiplier = this.getSpeedMultiplier();
+    this.scheduleAlarm(Math.max(10, Math.round(TIMING.BID_TIMEOUT_MS * multiplier)));
   }
 
   private scheduleAlarm(delayMs: number): void {
@@ -1098,6 +1188,31 @@ export class GameRoom {
         type: 'game-state',
         state: this.roomState.gameState,
       });
+
+      // Schedule bot actions for the new phase
+      this.scheduleBotTurnIfNeeded();
+
+      // In spectator mode, auto-advance summary phases and auto-draw market cards
+      if (this.roomState.spectatorMode) {
+        this.scheduleSpectatorAutoAdvance();
+      }
+    }
+  }
+
+  private scheduleSpectatorAutoAdvance(): void {
+    if (!this.roomState?.gameState) return;
+
+    const phase = this.roomState.gameState.phase;
+    const multiplier = this.getSpeedMultiplier();
+    const autoAdvanceDelay = Math.max(10, Math.round(1500 * multiplier));
+
+    if (phase === 'setup-summary' || phase === 'auction-summary') {
+      this.scheduleAlarm(autoAdvanceDelay);
+    } else if (phase === 'seed' || phase === 'early' || phase === 'mature') {
+      // Auto-draw market card (if not yet drawn and not in wildcard phase)
+      if (!this.roomState.gameState.wildcardPhase && this.roomState.gameState.roundPerformance.length === 0) {
+        this.scheduleAlarm(autoAdvanceDelay);
+      }
     }
   }
 
@@ -1172,6 +1287,10 @@ export class GameRoom {
       this.executeBotDrop();
     } else if (phase === 'exit') {
       this.executeBotExit();
+    } else if (this.roomState.spectatorMode && (phase === 'setup-summary' || phase === 'auction-summary')) {
+      this.executeSpectatorAdvance();
+    } else if (this.roomState.spectatorMode && (phase === 'seed' || phase === 'early' || phase === 'mature')) {
+      this.executeSpectatorMarketDraw();
     }
 
     // Persist state after bot actions
@@ -1202,7 +1321,7 @@ export class GameRoom {
         });
       }
       // Always schedule draw phase (even if no drop happened)
-      this.scheduleAlarm(getBotDelay());
+      this.scheduleAlarm(getBotDelay(this.getSpeedMultiplier()));
     } else if (this.roomState.gameState.setupPhase === 'draw') {
       const decision = decideSetupDraw(this.roomState.gameState, currentTurn);
 
@@ -1268,7 +1387,7 @@ export class GameRoom {
     const card = getCurrentCard(this.roomState.gameState);
     if (!card) return;
 
-    // First check if any bots want to bid
+    // Try all eligible bots in shuffled order before closing
     const eligibleBots = this.roomState.gameState.teams
       .map((t, i) => ({ team: t, index: i }))
       .filter(
@@ -1280,28 +1399,32 @@ export class GameRoom {
           (this.roomState?.gameState?.currentBid?.teamIndex !== index)
       );
 
-    // Let a random eligible bot try to bid
-    if (eligibleBots.length > 0) {
-      const randomBot = eligibleBots[Math.floor(Math.random() * eligibleBots.length)];
-      const decision = decideBid(this.roomState.gameState, randomBot.index, card);
+    // Shuffle to randomize who bids first
+    for (let i = eligibleBots.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [eligibleBots[i], eligibleBots[j]] = [eligibleBots[j], eligibleBots[i]];
+    }
+
+    for (const bot of eligibleBots) {
+      const decision = decideBid(this.roomState.gameState, bot.index, card);
 
       if (decision.action === 'bid' && decision.amount !== undefined) {
         const validation = validatePlaceBid(
           this.roomState.gameState,
-          randomBot.index,
+          bot.index,
           decision.amount
         );
 
         if (validation.valid) {
           this.roomState.gameState = placeBid(
             this.roomState.gameState,
-            randomBot.index,
+            bot.index,
             decision.amount
           );
 
           this.broadcast({
             type: 'bid-placed',
-            teamIndex: randomBot.index,
+            teamIndex: bot.index,
             amount: decision.amount,
           });
 
@@ -1374,7 +1497,7 @@ export class GameRoom {
 
     // Check if all selections are in
     if (allWildcardsSelected(this.roomState.gameState)) {
-      this.revealWildcardsAndDrawMarket();
+      this.revealAndApplyWildcards();
     } else {
       // Schedule next bot wildcard
       this.scheduleBotWildcards();
@@ -1452,5 +1575,82 @@ export class GameRoom {
       // Schedule next bot exit
       this.scheduleBotExits();
     }
+  }
+
+  // ===========================================
+  // Spectator Auto-Advance
+  // ===========================================
+
+  private executeSpectatorAdvance(): void {
+    if (!this.roomState?.gameState) return;
+
+    const phase = this.roomState.gameState.phase;
+    const manualAdvancePhases = ['setup-summary', 'auction-summary'];
+
+    if (!manualAdvancePhases.includes(phase)) return;
+
+    this.roomState.gameState = advancePhase(this.roomState.gameState);
+
+    this.broadcast({
+      type: 'phase-changed',
+      phase: this.roomState.gameState.phase,
+    });
+
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    // Continue scheduling bot turns for the new phase
+    this.scheduleBotTurnIfNeeded();
+
+    // Continue auto-advancing if still in a spectator-advanceable phase
+    if (this.roomState.spectatorMode) {
+      this.scheduleSpectatorAutoAdvance();
+    }
+  }
+
+  private executeSpectatorMarketDraw(): void {
+    if (!this.roomState?.gameState) return;
+
+    const phase = this.roomState.gameState.phase;
+    if (phase !== 'seed' && phase !== 'early' && phase !== 'mature') return;
+
+    // Don't draw if we're in wildcard phase (waiting for wildcard selections)
+    if (this.roomState.gameState.wildcardPhase) return;
+
+    // Draw market card
+    this.roomState.gameState = drawMarketCard(this.roomState.gameState);
+
+    // Broadcast drawn card
+    this.broadcast({
+      type: 'market-card-drawn',
+      card: this.roomState.gameState.currentMarketCard,
+    });
+
+    // Apply market effects
+    this.roomState.gameState = applyMarketEffects(this.roomState.gameState);
+
+    // Apply market leader bonus
+    this.roomState.gameState = applyMarketLeaderBonus(this.roomState.gameState);
+
+    // Broadcast results (bots can now see valuations before wildcard decision)
+    this.broadcast({
+      type: 'market-results',
+      performance: this.roomState.gameState.roundPerformance,
+      teams: this.roomState.gameState.teams,
+    });
+
+    // Enter wildcard phase — bots react to market results
+    this.roomState.gameState.wildcardPhase = true;
+    this.roomState.gameState.teamWildcardSelections = {};
+
+    this.broadcast({
+      type: 'game-state',
+      state: this.roomState.gameState,
+    });
+
+    // Schedule bot wildcards
+    this.scheduleBotWildcards();
   }
 }

@@ -171,7 +171,8 @@ export function isPhaseComplete(state: GameState): boolean {
     case 'seed':
     case 'early':
     case 'mature':
-      return state.currentMarketCard !== null; // Market card drawn
+      // Complete when wildcards are resolved and market effects have been applied
+      return !state.wildcardPhase && state.roundPerformance.length > 0;
 
     case 'secondary-drop':
       return state.droppedEmployees.length >= state.teams.filter((t) => !t.isDisqualified).length;
@@ -225,8 +226,9 @@ export function advancePhase(state: GameState): GameState {
       case 'early':
       case 'mature':
         newState.currentMarketCard = null;
-        newState.wildcardPhase = true;
+        newState.wildcardPhase = false;
         newState.teamWildcardSelections = {};
+        newState.roundPerformance = [];
         break;
       case 'secondary-drop':
         newState.droppedEmployees = [];
@@ -675,13 +677,6 @@ export function applyMarketEffects(state: GameState): GameState {
       totalChange += 0.05 * (categoryCount['Engineering'] ?? 0);
     }
 
-    // Apply wildcard effects
-    if (team.wildcardActiveThisRound === 'double-down') {
-      totalChange *= 2;
-    } else if (team.wildcardActiveThisRound === 'shield' && totalChange < 0) {
-      totalChange = 0;
-    }
-
     // Calculate new valuation
     const valuationChange = previousValuation * totalChange;
     const newValuation = Math.max(0, previousValuation + valuationChange);
@@ -702,11 +697,6 @@ export function applyMarketEffects(state: GameState): GameState {
   // Move card to used pile
   newState.usedMarketCards.push(card);
   newState.currentMarketCard = null;
-
-  // Clear wildcard active status
-  newState.teams.forEach((team) => {
-    team.wildcardActiveThisRound = null;
-  });
 
   return newState;
 }
@@ -737,6 +727,47 @@ export function applyMarketLeaderBonus(state: GameState): GameState {
     team.isMarketLeader = true;
     team.marketLeaderCount++;
     team.valuation = Math.round(team.valuation * (1 + leaderBonus));
+  });
+
+  return newState;
+}
+
+export function applyWildcardModifiers(state: GameState): GameState {
+  const newState = deepClone(state);
+
+  newState.teams.forEach((team, index) => {
+    if (team.isDisqualified) return;
+
+    const choice = team.wildcardActiveThisRound;
+    if (!choice || choice === 'pass') return;
+
+    // Use previousValuation (set before market effects) to compute the round's gain
+    const roundGain = team.valuation - team.previousValuation;
+
+    if (choice === 'double-down') {
+      // Double the gain/loss from this round
+      team.valuation = Math.max(0, team.valuation + roundGain);
+      team.currentGain = roundGain * 2;
+    } else if (choice === 'shield' && roundGain < 0) {
+      // Revert losses — restore to pre-market valuation
+      team.valuation = team.previousValuation;
+      team.currentGain = 0;
+    }
+
+    // Update round performance entry
+    const perfEntry = newState.roundPerformance.find((p) => p.teamIndex === index);
+    if (perfEntry) {
+      perfEntry.newValuation = team.valuation;
+      perfEntry.gain = team.currentGain;
+      perfEntry.percentChange = team.previousValuation > 0
+        ? (team.currentGain / team.previousValuation) * 100
+        : 0;
+    }
+  });
+
+  // Clear wildcard active status
+  newState.teams.forEach((team) => {
+    team.wildcardActiveThisRound = null;
   });
 
   return newState;

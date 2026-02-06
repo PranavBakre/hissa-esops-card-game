@@ -10,6 +10,9 @@ import {
   joinRoom,
   selectTeam,
   startGame,
+  startBotGame,
+  setGameSpeed,
+  watchBotGame,
   registerTeam,
   leaveRoom,
   dropCard,
@@ -95,6 +98,10 @@ function renderHome(app: HTMLElement): void {
             Join
           </button>
         </div>
+
+        <button class="btn btn-secondary btn-large" id="watch-bot-game-btn">
+          Watch Bot Game
+        </button>
       </div>
     </div>
   `;
@@ -102,6 +109,10 @@ function renderHome(app: HTMLElement): void {
   // Event listeners
   document.getElementById('create-room-btn')?.addEventListener('click', () => {
     createRoom();
+  });
+
+  document.getElementById('watch-bot-game-btn')?.addEventListener('click', () => {
+    watchBotGame();
   });
 
   document.getElementById('join-room-btn')?.addEventListener('click', () => {
@@ -190,13 +201,18 @@ function renderLobby(app: HTMLElement): void {
 
       <div class="lobby-footer">
         ${state.isHost ? `
-          <button
-            class="btn btn-primary btn-large"
-            id="start-game-btn"
-            ${state.room.players.some((p) => p.teamIndex !== null) ? '' : 'disabled'}
-          >
-            Start Game
-          </button>
+          <div class="lobby-start-buttons">
+            <button
+              class="btn btn-primary btn-large"
+              id="start-game-btn"
+              ${state.room.players.some((p) => p.teamIndex !== null) ? '' : 'disabled'}
+            >
+              Start Game
+            </button>
+            <button class="btn btn-secondary btn-large" id="start-bot-game-btn">
+              Start Bot Game
+            </button>
+          </div>
           <p class="lobby-hint">Empty team slots will be filled with bots</p>
         ` : `
           <p class="lobby-hint">Waiting for host to start the game...</p>
@@ -216,6 +232,7 @@ function renderLobby(app: HTMLElement): void {
   });
 
   document.getElementById('start-game-btn')?.addEventListener('click', startGame);
+  document.getElementById('start-bot-game-btn')?.addEventListener('click', startBotGame);
 }
 
 // ===========================================
@@ -287,6 +304,16 @@ function renderGame(app: HTMLElement): void {
     }
   });
 
+  // Speed control listeners (spectator mode)
+  document.querySelectorAll('.btn-speed').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const speed = btn.getAttribute('data-speed');
+      if (speed === 'normal' || speed === 'fast' || speed === 'instant') {
+        setGameSpeed(speed);
+      }
+    });
+  });
+
   // Attach event listeners based on phase
   attachPhaseEventListeners(phase);
 }
@@ -318,6 +345,7 @@ function renderPhaseBar(): string {
           ← Exit
         </button>
         <span class="room-code">Room: ${state.room?.code ?? ''}</span>
+        ${state.spectatorMode ? '<span class="spectator-badge">Spectator Mode</span>' : ''}
       </div>
       <div class="phase-bar-phases">
         ${mainPhases.map((phase, index) => `
@@ -326,6 +354,13 @@ function renderPhaseBar(): string {
           </div>
         `).join('')}
       </div>
+      ${state.spectatorMode ? `
+        <div class="speed-controls">
+          <button class="btn btn-speed ${state.gameSpeed === 'normal' ? 'active' : ''}" data-speed="normal">Normal</button>
+          <button class="btn btn-speed ${state.gameSpeed === 'fast' ? 'active' : ''}" data-speed="fast">Fast</button>
+          <button class="btn btn-speed ${state.gameSpeed === 'instant' ? 'active' : ''}" data-speed="instant">Instant</button>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -604,7 +639,9 @@ function renderSetupSummary(): string {
         `).join('')}
       </div>
 
-      ${state.isHost ? `
+      ${state.spectatorMode ? `
+        <p class="summary-note">Auto-advancing...</p>
+      ` : state.isHost ? `
         <div class="summary-actions">
           <button class="btn btn-primary btn-large" id="advance-phase-btn">
             Continue to Auction
@@ -741,7 +778,9 @@ function renderAuctionSummary(): string {
         `).join('')}
       </div>
 
-      ${state.isHost ? `
+      ${state.spectatorMode ? `
+        <p class="summary-note">Auto-advancing...</p>
+      ` : state.isHost ? `
         <div class="summary-actions">
           <button class="btn btn-primary btn-large" id="advance-phase-btn">
             Start Market Rounds
@@ -768,25 +807,64 @@ function renderMarketRound(): string {
   const hasSelectedWildcard = state.myTeamIndex !== null &&
     state.gameState.teamWildcardSelections[state.myTeamIndex] !== undefined;
 
+  const hasResults = state.gameState.roundPerformance.length > 0;
+  const needsDraw = !isWildcardPhase && !hasResults;
+
   return `
     <div class="market-round">
       <h2>${phaseName} Round</h2>
       <p class="phase-description">${getMarketPhaseDescription(phase)}</p>
 
+      ${needsDraw ? `
+        <div class="market-draw">
+          ${state.spectatorMode ? `
+            <p class="summary-note">Drawing market card...</p>
+          ` : state.isHost ? `
+            <button class="btn btn-primary btn-large" id="draw-market-btn">
+              Draw Market Card
+            </button>
+          ` : `
+            <p class="summary-note">Waiting for host to draw market card...</p>
+          `}
+        </div>
+      ` : ''}
+
+      ${hasResults ? `
+        <div class="market-results">
+          <h3>Round Results</h3>
+          <div class="results-grid">
+            ${state.gameState.roundPerformance.map((perf) => {
+              const team = state.gameState?.teams[perf.teamIndex];
+              if (!team) return '';
+              return `
+                <div class="result-card" style="--team-color: ${team.color}">
+                  <div class="result-team">${team.name}</div>
+                  <div class="result-change ${perf.gain >= 0 ? 'positive' : 'negative'}">
+                    ${perf.gain >= 0 ? '+' : ''}${formatCurrency(perf.gain)}
+                  </div>
+                  <div class="result-valuation">${formatCurrency(team.valuation)}</div>
+                  ${team.isMarketLeader ? '<div class="leader-badge">Market Leader</div>' : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       ${isWildcardPhase ? `
         <div class="wildcard-phase">
           <h3>Wildcard Decision</h3>
+          <p class="wildcard-context">Now that you've seen the market results, choose your wildcard strategy:</p>
           ${myTeam && !hasSelectedWildcard ? `
-            <p class="wildcard-prompt">Choose your wildcard strategy for this round:</p>
             <div class="wildcard-options">
               ${!myTeam.wildcardUsed ? `
                 <div class="wildcard-option" data-choice="double-down">
                   <div class="wildcard-name">Double Down</div>
-                  <div class="wildcard-desc">2x gains AND losses this round</div>
+                  <div class="wildcard-desc">Double your gains or losses this round</div>
                 </div>
                 <div class="wildcard-option" data-choice="shield">
                   <div class="wildcard-name">Shield</div>
-                  <div class="wildcard-desc">Immune to losses this round</div>
+                  <div class="wildcard-desc">Revert any losses this round</div>
                 </div>
               ` : `
                 <p class="wildcard-used-note">You've already used your wildcard in a previous round.</p>
@@ -814,46 +892,6 @@ function renderMarketRound(): string {
               `;
             }).join('')}
           </div>
-        </div>
-      ` : `
-        <div class="market-draw">
-          ${state.isHost ? `
-            <button class="btn btn-primary btn-large" id="draw-market-btn">
-              Draw Market Card
-            </button>
-          ` : `
-            <p class="summary-note">Waiting for host to draw market card...</p>
-          `}
-        </div>
-      `}
-
-      ${state.gameState.roundPerformance.length > 0 ? `
-        <div class="market-results">
-          <h3>Round Results</h3>
-          <div class="results-grid">
-            ${state.gameState.roundPerformance.map((perf) => {
-              const team = state.gameState?.teams[perf.teamIndex];
-              if (!team) return '';
-              return `
-                <div class="result-card" style="--team-color: ${team.color}">
-                  <div class="result-team">${team.name}</div>
-                  <div class="result-change ${perf.gain >= 0 ? 'positive' : 'negative'}">
-                    ${perf.gain >= 0 ? '+' : ''}${formatCurrency(perf.gain)}
-                  </div>
-                  <div class="result-valuation">${formatCurrency(team.valuation)}</div>
-                  ${team.isMarketLeader ? '<div class="leader-badge">Market Leader</div>' : ''}
-                </div>
-              `;
-            }).join('')}
-          </div>
-
-          ${state.isHost ? `
-            <div class="summary-actions">
-              <button class="btn btn-primary btn-large" id="advance-phase-btn">
-                Continue
-              </button>
-            </div>
-          ` : ''}
         </div>
       ` : ''}
     </div>

@@ -27,6 +27,8 @@ export type SetupPhase = 'drop' | 'draw';
 
 export type WildcardChoice = 'double-down' | 'shield' | 'pass';
 
+export type GameSpeed = 'normal' | 'fast' | 'instant';
+
 export type PlayerRole = 'player' | 'spectator';
 
 // ===========================================
@@ -40,6 +42,8 @@ export interface RoomState {
   createdAt: number;
   players: PlayerSession[];
   gameState: GameState | null;
+  spectatorMode: boolean;
+  gameSpeed: GameSpeed;
 }
 
 export interface PlayerSession {
@@ -248,6 +252,8 @@ export type ClientMessage =
   | { type: 'reconnect'; playerId: string }
   | { type: 'select-team'; teamIndex: number }
   | { type: 'start-game' }
+  | { type: 'start-bot-game' }
+  | { type: 'set-game-speed'; speed: GameSpeed }
   | { type: 'register-team'; name: string; problemStatement: string }
   | { type: 'drop-card'; cardId: number; isSegment: boolean }
   | { type: 'draw-card'; deckType: 'segment' | 'idea' }

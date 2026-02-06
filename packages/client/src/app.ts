@@ -5,6 +5,7 @@
 import type {
   RoomState,
   GameState,
+  GameSpeed,
   ClientMessage,
   ServerMessage,
 } from '@esop-wars/shared';
@@ -50,6 +51,9 @@ export interface ClientState {
   ws: WebSocket | null;
   connected: boolean;
   view: 'home' | 'lobby' | 'game';
+  spectatorMode: boolean;
+  gameSpeed: GameSpeed;
+  pendingBotGame: boolean;
 }
 
 export const state: ClientState = {
@@ -63,6 +67,9 @@ export const state: ClientState = {
   ws: null,
   connected: false,
   view: 'home',
+  spectatorMode: false,
+  gameSpeed: 'normal',
+  pendingBotGame: false,
 };
 
 // ===========================================
@@ -121,6 +128,31 @@ export function joinRoom(code: string): void {
   if (playerName) {
     state.roomCode = code.toUpperCase();
     connect(code.toUpperCase(), false);
+  }
+}
+
+export async function watchBotGame(): Promise<void> {
+  try {
+    const response = await fetch(`${API_URL}/api/rooms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create room');
+    }
+
+    const data = await response.json();
+    state.roomCode = data.code;
+    state.playerName = 'Spectator';
+    localStorage.setItem('esop-wars-playerName', 'Spectator');
+
+    // Connect and start bot game once joined
+    state.pendingBotGame = true;
+    connect(data.code, false);
+  } catch (error) {
+    console.error('Error creating bot game room:', error);
+    showToast('Failed to create room', 'error');
   }
 }
 
@@ -214,6 +246,9 @@ function clearSession(): void {
   state.room = null;
   state.gameState = null;
   state.view = 'home';
+  state.spectatorMode = false;
+  state.gameSpeed = 'normal';
+  state.pendingBotGame = false;
 }
 
 export function send(message: ClientMessage): void {
@@ -392,6 +427,8 @@ function handleRoomJoined(msg: { room: RoomState; playerId: string }): void {
   state.room = msg.room;
   state.gameState = msg.room.gameState;
   state.view = msg.room.status === 'LOBBY' ? 'lobby' : 'game';
+  state.spectatorMode = msg.room.spectatorMode;
+  state.gameSpeed = msg.room.gameSpeed;
 
   // Find my team
   const myPlayer = msg.room.players.find((p) => p.playerId === msg.playerId);
@@ -403,6 +440,13 @@ function handleRoomJoined(msg: { room: RoomState; playerId: string }): void {
   // Save session
   localStorage.setItem('esop-wars-playerId', msg.playerId);
   localStorage.setItem('esop-wars-roomCode', msg.room.code);
+
+  // Auto-start bot game if pending
+  if (state.pendingBotGame) {
+    state.pendingBotGame = false;
+    startBotGame();
+    return; // game-state message will trigger render
+  }
 
   render();
 }
@@ -417,6 +461,17 @@ export function selectTeam(teamIndex: number): void {
 
 export function startGame(): void {
   send({ type: 'start-game' });
+}
+
+export function startBotGame(): void {
+  state.spectatorMode = true;
+  send({ type: 'start-bot-game' });
+}
+
+export function setGameSpeed(speed: GameSpeed): void {
+  state.gameSpeed = speed;
+  send({ type: 'set-game-speed', speed });
+  render();
 }
 
 export function registerTeam(name: string, problemStatement: string): void {
