@@ -1181,7 +1181,7 @@ function renderWinner(): string {
       </div>
 
       <div class="game-over-actions">
-        <button class="btn btn-secondary" onclick="location.reload()">
+        <button class="btn btn-secondary" id="play-again-btn">
           Play Again
         </button>
       </div>
@@ -1230,6 +1230,11 @@ function attachPhaseEventListeners(phase: Phase): void {
       break;
     case 'exit':
       attachExitListeners();
+      break;
+    case 'winner':
+      document.getElementById('play-again-btn')?.addEventListener('click', () => {
+        leaveRoom();
+      });
       break;
   }
 }
