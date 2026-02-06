@@ -29,11 +29,11 @@ function isServerMessage(data: unknown): data is ServerMessage {
 // ===========================================
 
 const API_URL = import.meta.env.PROD
-  ? 'https://esop-wars.workers.dev'
+  ? 'https://esop-game-api.psbakre.dev'
   : 'http://localhost:8787';
 
 const WS_URL = import.meta.env.PROD
-  ? 'wss://esop-wars.workers.dev'
+  ? 'wss://esop-game-api.psbakre.dev'
   : 'ws://localhost:8787';
 
 // ===========================================

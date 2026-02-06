@@ -7,13 +7,14 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=esop-wars --commit-dirty=true"
   },
   "dependencies": {
     "@esop-wars/shared": "*"
   },
   "devDependencies": {
-    "vite": "^6.0.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
   }
 }
