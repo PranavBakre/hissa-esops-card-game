@@ -36,10 +36,9 @@ import {
   populateSecondaryPool,
   getSecondaryCard,
   closeSecondaryBidding,
-  chooseExit,
+  drawExit,
   allExitsChosen,
   applyExitMultipliers,
-  getAvailableExitCards,
 } from './game-engine';
 import {
   validateDropCard,
@@ -50,7 +49,7 @@ import {
   validateSelectWildcard,
   validateDrawMarket,
   validateDropEmployee,
-  validateSelectExit,
+  validateDrawExit,
 } from './validators';
 import {
   decideSetupDrop,
@@ -59,7 +58,6 @@ import {
   decideBid,
   decideWildcard,
   decideSecondaryDrop,
-  decideExit,
   getBotDelay,
   BOT_TIMING,
 } from './bot-player';
@@ -301,8 +299,8 @@ export class GameRoom {
         this.handleDropEmployee(ws, session, msg.employeeId);
         break;
 
-      case 'select-exit':
-        this.handleSelectExit(ws, session, msg.exitId);
+      case 'draw-exit':
+        this.handleDrawExit(ws, session);
         break;
 
       case 'start-bot-game':
@@ -948,32 +946,29 @@ export class GameRoom {
   // Exit Phase Handlers
   // ===========================================
 
-  private handleSelectExit(
+  private handleDrawExit(
     ws: WebSocket,
-    session: SessionData,
-    exitId: number
+    session: SessionData
   ): void {
     if (!this.roomState?.gameState || session.teamIndex === null) return;
 
-    const validation = validateSelectExit(
+    const validation = validateDrawExit(
       this.roomState.gameState,
-      session.teamIndex,
-      exitId
+      session.teamIndex
     );
     if (!validation.valid) {
       this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
       return;
     }
 
-    this.roomState.gameState = chooseExit(
+    this.roomState.gameState = drawExit(
       this.roomState.gameState,
-      session.teamIndex,
-      exitId
+      session.teamIndex
     );
 
     const team = this.roomState.gameState.teams[session.teamIndex];
 
-    // Broadcast the exit choice
+    // Broadcast the drawn exit card
     if (team.exitChoice) {
       this.broadcast({
         type: 'exit-chosen',
@@ -982,9 +977,18 @@ export class GameRoom {
       });
     }
 
-    // Check if all exits are chosen
+    // Check if all exits are drawn
     if (allExitsChosen(this.roomState.gameState)) {
       this.applyExitsAndFinish();
+    } else {
+      // Broadcast updated game state (shows current exit turn)
+      this.broadcast({
+        type: 'game-state',
+        state: this.roomState.gameState,
+      });
+
+      // Schedule next bot draw if needed
+      this.scheduleBotExits();
     }
   }
 
@@ -1110,16 +1114,11 @@ export class GameRoom {
   private scheduleBotExits(): void {
     if (!this.roomState?.gameState) return;
 
-    const botsNeedingExit = this.roomState.gameState.teams
-      .map((t, i) => ({ team: t, index: i }))
-      .filter(
-        ({ team }) =>
-          team.isBot &&
-          !team.isDisqualified &&
-          team.exitChoice === null
-      );
+    const turn = this.roomState.gameState.currentExitTurn;
+    if (turn < 0) return; // All teams have drawn
 
-    if (botsNeedingExit.length > 0) {
+    const team = this.roomState.gameState.teams[turn];
+    if (team && team.isBot && !team.isDisqualified && team.exitChoice === null) {
       this.scheduleAlarm(getBotDelay(this.getSpeedMultiplier()));
     }
   }
@@ -1538,41 +1537,39 @@ export class GameRoom {
   private executeBotExit(): void {
     if (!this.roomState?.gameState || this.roomState.gameState.phase !== 'exit') return;
 
-    // Find first bot that needs to choose exit
-    const botIndex = this.roomState.gameState.teams.findIndex(
-      (t) =>
-        t.isBot &&
-        !t.isDisqualified &&
-        t.exitChoice === null
-    );
+    const turn = this.roomState.gameState.currentExitTurn;
+    if (turn < 0) return;
 
-    if (botIndex === -1) return;
+    const team = this.roomState.gameState.teams[turn];
+    if (!team || !team.isBot || team.isDisqualified || team.exitChoice !== null) return;
 
-    const exitCards = getAvailableExitCards();
-    const exitId = decideExit(this.roomState.gameState, botIndex, exitCards);
-
-    this.roomState.gameState = chooseExit(
+    // Bot just draws from the deck - no strategy needed
+    this.roomState.gameState = drawExit(
       this.roomState.gameState,
-      botIndex,
-      exitId
+      turn
     );
 
-    const team = this.roomState.gameState.teams[botIndex];
-
-    // Broadcast the exit choice
-    if (team.exitChoice) {
+    // Broadcast the drawn exit card
+    const updatedTeam = this.roomState.gameState.teams[turn];
+    if (updatedTeam.exitChoice) {
       this.broadcast({
         type: 'exit-chosen',
-        teamIndex: botIndex,
-        exitCard: team.exitChoice,
+        teamIndex: turn,
+        exitCard: updatedTeam.exitChoice,
       });
     }
 
-    // Check if all exits are chosen
+    // Check if all exits are drawn
     if (allExitsChosen(this.roomState.gameState)) {
       this.applyExitsAndFinish();
     } else {
-      // Schedule next bot exit
+      // Broadcast updated game state (shows current exit turn)
+      this.broadcast({
+        type: 'game-state',
+        state: this.roomState.gameState,
+      });
+
+      // Schedule next bot exit draw
       this.scheduleBotExits();
     }
   }

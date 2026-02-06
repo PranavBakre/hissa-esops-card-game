@@ -319,10 +319,9 @@ export function validateDropEmployee(
 // Exit Validators
 // ===========================================
 
-export function validateSelectExit(
+export function validateDrawExit(
   state: GameState,
-  teamIndex: number,
-  exitId: number
+  teamIndex: number
 ): ValidationResult {
   if (state.phase !== 'exit') {
     return { valid: false, error: 'Not in exit phase' };
@@ -335,11 +334,15 @@ export function validateSelectExit(
   }
 
   if (team.exitChoice !== null) {
-    return { valid: false, error: 'Exit already chosen' };
+    return { valid: false, error: 'Exit already drawn' };
   }
 
-  if (exitId < 0) {
-    return { valid: false, error: 'Invalid exit card' };
+  if (state.currentExitTurn !== teamIndex) {
+    return { valid: false, error: 'Not your turn to draw' };
+  }
+
+  if (state.exitDeck.length === 0) {
+    return { valid: false, error: 'No exit cards remaining' };
   }
 
   return { valid: true };
@@ -379,10 +382,9 @@ export function isPlayersTurn(
     return !state.droppedEmployees.some((d) => d.fromTeamIndex === teamIndex);
   }
 
-  // Exit allows parallel selection
+  // Exit is turn-based (draw from deck)
   if (state.phase === 'exit') {
-    const team = state.teams[teamIndex];
-    return team.exitChoice === null;
+    return state.currentExitTurn === teamIndex;
   }
 
   return true;

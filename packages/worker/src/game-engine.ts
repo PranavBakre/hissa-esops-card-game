@@ -120,7 +120,8 @@ export function createInitialState(config: GameConfig): GameState {
     droppedEmployees: [],
     secondaryPool: [],
 
-    exitCard: null,
+    exitDeck: [],
+    currentExitTurn: 0,
   };
 }
 
@@ -235,6 +236,10 @@ export function advancePhase(state: GameState): GameState {
         break;
       case 'secondary-hire':
         // Pool is populated during drop phase
+        break;
+      case 'exit':
+        newState.exitDeck = shuffleArray([...exitCards]);
+        newState.currentExitTurn = findFirstActiveTeam(newState);
         break;
     }
   }
@@ -877,28 +882,40 @@ export function closeSecondaryBidding(state: GameState): GameState {
 // Exit Phase
 // ===========================================
 
-export function getAvailableExitCards(): typeof exitCards {
-  return exitCards;
+function findFirstActiveTeam(state: GameState): number {
+  return state.teams.findIndex((t) => !t.isDisqualified);
 }
 
-export function chooseExit(
+function findNextActiveTeam(state: GameState, afterIndex: number): number {
+  for (let i = afterIndex + 1; i < state.teams.length; i++) {
+    if (!state.teams[i].isDisqualified && state.teams[i].exitChoice === null) {
+      return i;
+    }
+  }
+  return -1; // All teams have drawn
+}
+
+export function drawExit(
   state: GameState,
-  teamIndex: number,
-  exitId: number
+  teamIndex: number
 ): GameState {
   const newState = deepClone(state);
   const team = newState.teams[teamIndex];
 
   if (team.isDisqualified) return state;
-  if (team.exitChoice !== null) return state; // Already chosen
+  if (team.exitChoice !== null) return state; // Already drawn
+  if (newState.exitDeck.length === 0) return state; // No cards left
 
-  // Find the exit card
-  const exitCard = exitCards.find((c) => c.id === exitId);
-  if (!exitCard) return state;
+  // Pop top card from shuffled deck
+  const drawnCard = newState.exitDeck.shift();
+  if (!drawnCard) return state;
 
   // Store pre-exit valuation and set choice
   team.preExitValuation = team.valuation;
-  team.exitChoice = exitCard;
+  team.exitChoice = drawnCard;
+
+  // Advance to next team's turn
+  newState.currentExitTurn = findNextActiveTeam(newState, teamIndex);
 
   return newState;
 }

@@ -95,7 +95,8 @@ export interface GameState {
   secondaryPool: EmployeeCard[];
 
   // Exit
-  exitCard: ExitCard | null;
+  exitDeck: ExitCard[];
+  currentExitTurn: number;
 }
 
 export interface Bid {
@@ -266,7 +267,7 @@ export type ClientMessage =
   | { type: 'draw-market' }
   | { type: 'drop-employee'; employeeId: number }
   | { type: 'select-secondary'; employeeId: number }
-  | { type: 'select-exit'; exitId: number };
+  | { type: 'draw-exit' };
 
 // Server -> Client
 export type ServerMessage =

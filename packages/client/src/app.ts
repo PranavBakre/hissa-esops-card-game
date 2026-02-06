@@ -408,7 +408,7 @@ function handleMessage(msg: ServerMessage): void {
       if (state.gameState && msg.exitCard) {
         state.gameState.teams[msg.teamIndex].exitChoice = msg.exitCard;
         const team = state.gameState.teams[msg.teamIndex];
-        showToast(`${team.name} chose ${msg.exitCard.name} (${msg.exitCard.multiplier}x)`, 'success');
+        showToast(`${team.name} drew ${msg.exitCard.name} (${msg.exitCard.multiplier}x)`, 'success');
         render();
       }
       break;
@@ -534,6 +534,6 @@ export function dropEmployeeAction(employeeId: number): void {
 }
 
 // Exit Actions
-export function selectExit(exitId: number): void {
-  send({ type: 'select-exit', exitId });
+export function drawExit(): void {
+  send({ type: 'draw-exit' });
 }

@@ -417,20 +417,38 @@ export const exitCards: ExitCard[] = [
   {
     id: 1,
     name: 'IPO',
-    multiplier: 2.2,
-    description: 'You ring the bell! Public markets reward your journey with great returns.',
+    multiplier: 2.0,
+    description: 'You ring the bell! Public markets reward your journey with massive returns.',
   },
   {
     id: 2,
-    name: 'M&A',
-    multiplier: 1.8,
+    name: 'Acquisition (M&A)',
+    multiplier: 1.5,
     description: 'Acquired by a tech giant. Solid exit with strong synergies.',
   },
   {
     id: 3,
-    name: 'Joint Venture',
-    multiplier: 1.5,
-    description: 'Strategic partnership. Conservative exit but guaranteed returns.',
+    name: 'Strategic Merger',
+    multiplier: 1.3,
+    description: 'Merge with a complementary company for steady growth.',
+  },
+  {
+    id: 4,
+    name: 'PE Buyout',
+    multiplier: 1.2,
+    description: 'Sell to a private equity firm. Safe but modest returns.',
+  },
+  {
+    id: 5,
+    name: 'Management Buyout',
+    multiplier: 0.8,
+    description: 'The management team buys out investors at a discount.',
+  },
+  {
+    id: 6,
+    name: 'Fire Sale',
+    multiplier: 0.5,
+    description: 'Desperate times call for desperate measures. Liquidate at a loss.',
   },
 ];
 

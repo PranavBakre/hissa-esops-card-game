@@ -348,35 +348,5 @@ export function decideSecondaryDrop(
 // Exit Decisions
 // ===========================================
 
-import type { ExitCard } from '@esop-wars/shared';
-
-export function decideExit(
-  state: GameState,
-  teamIndex: number,
-  exitCards: ExitCard[]
-): number {
-  const team = state.teams[teamIndex];
-
-  // Calculate team's position
-  const activeTeams = state.teams.filter((t) => !t.isDisqualified);
-  const sortedByValuation = [...activeTeams].sort((a, b) => b.valuation - a.valuation);
-  const rank = sortedByValuation.findIndex((t) => t.name === team.name);
-
-  // Leaders prefer stable exits (lower multiplier = less risk)
-  // Trailing teams prefer high-risk exits (higher multiplier)
-  const sortedExits = [...exitCards].sort((a, b) => {
-    if (rank <= 1) {
-      // Leaders: prefer safer (lower) multipliers
-      return a.multiplier - b.multiplier;
-    } else {
-      // Trailing: prefer higher multipliers
-      return b.multiplier - a.multiplier;
-    }
-  });
-
-  // Add some randomness - pick from top 2 choices
-  const topChoices = sortedExits.slice(0, Math.min(2, sortedExits.length));
-  const choice = topChoices[Math.floor(Math.random() * topChoices.length)];
-
-  return choice.id;
-}
+// With the draw mechanic, bots simply draw from the shuffled deck.
+// No strategy needed - luck of the draw!
