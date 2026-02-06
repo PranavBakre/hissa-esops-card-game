@@ -3030,30 +3030,73 @@ input::placeholder, textarea::placeholder {
 }
 
 .about-modal {
-  max-width: 360px;
+  max-width: 480px;
 }
 
 .about-body {
   text-align: center;
 }
 
-.about-title {
-  font-size: 24px;
+.about-logo {
+  font-size: 32px;
   font-weight: 900;
   margin-bottom: 4px;
 }
 
-.about-version {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent-primary);
-  margin-bottom: 20px;
+.about-logo .logo-esop {
+  color: var(--text-primary);
 }
 
-.about-body p {
+.about-logo .logo-wars {
+  background: linear-gradient(135deg, var(--accent-primary), #FF6B6B);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.about-version {
   font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.about-desc {
+  font-size: 15px;
   color: var(--text-secondary);
-  margin-bottom: 6px;
+  line-height: 1.7;
+  margin-bottom: 28px;
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.about-credits {
+  text-align: left;
+}
+
+.about-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.about-row:last-child {
+  border-bottom: none;
+}
+
+.about-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.about-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
 }
 
 /* ===========================================

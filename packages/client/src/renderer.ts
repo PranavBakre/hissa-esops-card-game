@@ -1896,10 +1896,27 @@ function openAboutModal(): void {
         <button class="modal-close" id="close-rules-btn">&times;</button>
       </div>
       <div class="modal-body about-body">
-        <div class="about-title">ESOP Wars</div>
+        <div class="about-logo"><span class="logo-esop">ESOP</span> <span class="logo-wars">Wars</span></div>
         <div class="about-version">v2.0</div>
-        <p>Idea credit: <strong>Hissa Fund</strong></p>
-        <p>Built by <strong>Pranav Bakre</strong></p>
+        <p class="about-desc">A multiplayer card game about building startups, hiring talent, and surviving the market. Compete with friends or watch bots battle it out.</p>
+        <div class="about-credits">
+          <div class="about-row">
+            <span class="about-label">Idea Credit</span>
+            <span class="about-value">Hissa Fund</span>
+          </div>
+          <div class="about-row">
+            <span class="about-label">Design & Development</span>
+            <span class="about-value">Pranav Bakre</span>
+          </div>
+          <div class="about-row">
+            <span class="about-label">Built with</span>
+            <span class="about-value">TypeScript, Cloudflare Workers</span>
+          </div>
+          <div class="about-row">
+            <span class="about-label">Players</span>
+            <span class="about-value">1\u20135 (bots fill empty slots)</span>
+          </div>
+        </div>
       </div>
     </div>
   `;
