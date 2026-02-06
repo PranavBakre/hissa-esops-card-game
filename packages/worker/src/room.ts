@@ -281,7 +281,8 @@ export class GameRoom {
         break;
 
       case 'pass-bid':
-        // No action needed for pass, just acknowledge
+        // Acknowledge the pass - no game state change needed
+        this.send(ws, { type: 'bid-passed', teamIndex: session.teamIndex ?? -1 });
         break;
 
       case 'select-wildcard':

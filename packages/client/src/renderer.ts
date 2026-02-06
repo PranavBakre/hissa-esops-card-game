@@ -280,6 +280,13 @@ function renderGame(app: HTMLElement): void {
     </div>
   `;
 
+  // Exit room button listener
+  document.getElementById('exit-room-btn')?.addEventListener('click', () => {
+    if (confirm('Are you sure you want to leave this game?')) {
+      leaveRoom();
+    }
+  });
+
   // Attach event listeners based on phase
   attachPhaseEventListeners(phase);
 }
@@ -306,11 +313,19 @@ function renderPhaseBar(): string {
 
   return `
     <div class="phase-bar">
-      ${mainPhases.map((phase, index) => `
-        <div class="phase-item ${state.gameState?.phase === phase ? 'active' : ''} ${index < currentIndex ? 'completed' : ''}">
-          ${PHASE_LABELS[phase] || phase}
-        </div>
-      `).join('')}
+      <div class="phase-bar-left">
+        <button class="btn btn-text btn-exit-room" id="exit-room-btn" title="Exit Room">
+          ← Exit
+        </button>
+        <span class="room-code">Room: ${state.room?.code ?? ''}</span>
+      </div>
+      <div class="phase-bar-phases">
+        ${mainPhases.map((phase, index) => `
+          <div class="phase-item ${state.gameState?.phase === phase ? 'active' : ''} ${index < currentIndex ? 'completed' : ''}">
+            ${PHASE_LABELS[phase] || phase}
+          </div>
+        `).join('')}
+      </div>
     </div>
   `;
 }
@@ -1052,7 +1067,7 @@ function renderExitPhase(): string {
 
       <div class="exit-status">
         <h3>Exit Status</h3>
-        ${state.gameState.teams.map((team, i) => {
+        ${state.gameState.teams.map((team) => {
           const hasChosenExit = team.exitChoice !== null;
           return team.isDisqualified ? '' : `
             <div class="exit-status-item ${hasChosenExit ? 'chosen' : 'pending'}">

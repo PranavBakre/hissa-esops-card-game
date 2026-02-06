@@ -273,6 +273,7 @@ export type ServerMessage =
   | { type: 'phase-changed'; phase: Phase }
   | { type: 'turn-changed'; teamIndex: number }
   | { type: 'bid-placed'; teamIndex: number; amount: number }
+  | { type: 'bid-passed'; teamIndex: number }
   | { type: 'bidding-closed'; winner: Bid | null; card: EmployeeCard }
   | { type: 'wildcard-selected'; teamIndex: number }
   | { type: 'wildcards-revealed'; selections: (WildcardChoice | null)[] }

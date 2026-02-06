@@ -316,6 +316,12 @@ function handleMessage(msg: ServerMessage): void {
       }
       break;
 
+    case 'bid-passed':
+      if (msg.teamIndex === state.myTeamIndex) {
+        showToast('You passed on this card', 'warning');
+      }
+      break;
+
     case 'bidding-closed':
       if (state.gameState && msg.winner) {
         const winnerTeam = state.gameState.teams[msg.winner.teamIndex];
