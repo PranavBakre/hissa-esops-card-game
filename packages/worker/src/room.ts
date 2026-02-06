@@ -34,8 +34,10 @@ import {
   populateSecondaryPool,
   getSecondaryCard,
   closeSecondaryBidding,
-  drawExitCard,
-  applyExitMultiplier,
+  chooseExit,
+  allExitsChosen,
+  applyExitMultipliers,
+  getAvailableExitCards,
 } from './game-engine';
 import {
   validateDropCard,
@@ -46,7 +48,7 @@ import {
   validateSelectWildcard,
   validateDrawMarket,
   validateDropEmployee,
-  validateDrawExit,
+  validateSelectExit,
 } from './validators';
 import {
   decideSetupDrop,
@@ -55,6 +57,7 @@ import {
   decideBid,
   decideWildcard,
   decideSecondaryDrop,
+  decideExit,
   getBotDelay,
   BOT_TIMING,
 } from './bot-player';
@@ -293,8 +296,8 @@ export class GameRoom {
         this.handleDropEmployee(ws, session, msg.employeeId);
         break;
 
-      case 'draw-exit':
-        this.handleDrawExit(ws, session);
+      case 'select-exit':
+        this.handleSelectExit(ws, session, msg.exitId);
         break;
 
       default: {
@@ -858,26 +861,51 @@ export class GameRoom {
   // Exit Phase Handlers
   // ===========================================
 
-  private handleDrawExit(ws: WebSocket, session: SessionData): void {
-    if (!this.roomState?.gameState) return;
+  private handleSelectExit(
+    ws: WebSocket,
+    session: SessionData,
+    exitId: number
+  ): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
 
-    const validation = validateDrawExit(this.roomState.gameState, session.isHost);
+    const validation = validateSelectExit(
+      this.roomState.gameState,
+      session.teamIndex,
+      exitId
+    );
     if (!validation.valid) {
       this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
       return;
     }
 
-    // Draw exit card
-    this.roomState.gameState = drawExitCard(this.roomState.gameState);
+    this.roomState.gameState = chooseExit(
+      this.roomState.gameState,
+      session.teamIndex,
+      exitId
+    );
 
-    // Broadcast exit card
-    this.broadcast({
-      type: 'exit-card-drawn',
-      card: this.roomState.gameState.exitCard,
-    });
+    const team = this.roomState.gameState.teams[session.teamIndex];
 
-    // Apply multiplier
-    this.roomState.gameState = applyExitMultiplier(this.roomState.gameState);
+    // Broadcast the exit choice
+    if (team.exitChoice) {
+      this.broadcast({
+        type: 'exit-chosen',
+        teamIndex: session.teamIndex,
+        exitCard: team.exitChoice,
+      });
+    }
+
+    // Check if all exits are chosen
+    if (allExitsChosen(this.roomState.gameState)) {
+      this.applyExitsAndFinish();
+    }
+  }
+
+  private applyExitsAndFinish(): void {
+    if (!this.roomState?.gameState) return;
+
+    // Apply all exit multipliers
+    this.roomState.gameState = applyExitMultipliers(this.roomState.gameState);
 
     // Broadcast final results
     this.broadcast({
@@ -918,6 +946,9 @@ export class GameRoom {
     } else if (phase === 'secondary-drop') {
       // Schedule bot drops
       this.scheduleBotDrops();
+    } else if (phase === 'exit') {
+      // Schedule bot exit selections
+      this.scheduleBotExits();
     }
   }
 
@@ -982,6 +1013,23 @@ export class GameRoom {
       );
 
     if (botsNeedingDrop.length > 0) {
+      this.scheduleAlarm(getBotDelay());
+    }
+  }
+
+  private scheduleBotExits(): void {
+    if (!this.roomState?.gameState) return;
+
+    const botsNeedingExit = this.roomState.gameState.teams
+      .map((t, i) => ({ team: t, index: i }))
+      .filter(
+        ({ team }) =>
+          team.isBot &&
+          !team.isDisqualified &&
+          team.exitChoice === null
+      );
+
+    if (botsNeedingExit.length > 0) {
       this.scheduleAlarm(getBotDelay());
     }
   }
@@ -1121,6 +1169,8 @@ export class GameRoom {
       this.executeBotWildcard();
     } else if (phase === 'secondary-drop') {
       this.executeBotDrop();
+    } else if (phase === 'exit') {
+      this.executeBotExit();
     }
 
     // Persist state after bot actions
@@ -1358,6 +1408,48 @@ export class GameRoom {
     } else {
       // Schedule next bot drop
       this.scheduleBotDrops();
+    }
+  }
+
+  private executeBotExit(): void {
+    if (!this.roomState?.gameState || this.roomState.gameState.phase !== 'exit') return;
+
+    // Find first bot that needs to choose exit
+    const botIndex = this.roomState.gameState.teams.findIndex(
+      (t) =>
+        t.isBot &&
+        !t.isDisqualified &&
+        t.exitChoice === null
+    );
+
+    if (botIndex === -1) return;
+
+    const exitCards = getAvailableExitCards();
+    const exitId = decideExit(this.roomState.gameState, botIndex, exitCards);
+
+    this.roomState.gameState = chooseExit(
+      this.roomState.gameState,
+      botIndex,
+      exitId
+    );
+
+    const team = this.roomState.gameState.teams[botIndex];
+
+    // Broadcast the exit choice
+    if (team.exitChoice) {
+      this.broadcast({
+        type: 'exit-chosen',
+        teamIndex: botIndex,
+        exitCard: team.exitChoice,
+      });
+    }
+
+    // Check if all exits are chosen
+    if (allExitsChosen(this.roomState.gameState)) {
+      this.applyExitsAndFinish();
+    } else {
+      // Schedule next bot exit
+      this.scheduleBotExits();
     }
   }
 }

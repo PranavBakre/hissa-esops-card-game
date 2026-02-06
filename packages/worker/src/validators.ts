@@ -319,20 +319,27 @@ export function validateDropEmployee(
 // Exit Validators
 // ===========================================
 
-export function validateDrawExit(
+export function validateSelectExit(
   state: GameState,
-  isHost: boolean
+  teamIndex: number,
+  exitId: number
 ): ValidationResult {
   if (state.phase !== 'exit') {
     return { valid: false, error: 'Not in exit phase' };
   }
 
-  if (!isHost) {
-    return { valid: false, error: 'Only host can draw exit card' };
+  const team = state.teams[teamIndex];
+
+  if (team.isDisqualified) {
+    return { valid: false, error: 'Team is disqualified' };
   }
 
-  if (state.exitCard !== null) {
-    return { valid: false, error: 'Exit card already drawn' };
+  if (team.exitChoice !== null) {
+    return { valid: false, error: 'Exit already chosen' };
+  }
+
+  if (exitId < 0) {
+    return { valid: false, error: 'Invalid exit card' };
   }
 
   return { valid: true };
@@ -370,6 +377,12 @@ export function isPlayersTurn(
   // Secondary drop allows parallel drops
   if (state.phase === 'secondary-drop') {
     return !state.droppedEmployees.some((d) => d.fromTeamIndex === teamIndex);
+  }
+
+  // Exit allows parallel selection
+  if (state.phase === 'exit') {
+    const team = state.teams[teamIndex];
+    return team.exitChoice === null;
   }
 
   return true;

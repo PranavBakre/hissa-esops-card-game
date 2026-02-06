@@ -143,6 +143,10 @@ export interface Team {
   currentGain: number;
   isMarketLeader: boolean;
   marketLeaderCount: number;
+
+  // Exit
+  exitChoice: ExitCard | null;
+  preExitValuation: number;
 }
 
 export interface TeamConfig {
@@ -256,7 +260,7 @@ export type ClientMessage =
   | { type: 'draw-market' }
   | { type: 'drop-employee'; employeeId: number }
   | { type: 'select-secondary'; employeeId: number }
-  | { type: 'draw-exit' };
+  | { type: 'select-exit'; exitId: number };
 
 // Server -> Client
 export type ServerMessage =
@@ -276,7 +280,7 @@ export type ServerMessage =
   | { type: 'market-results'; performance: RoundPerformance[]; teams: Team[] }
   | { type: 'employee-dropped'; teamIndex: number }
   | { type: 'drops-revealed'; dropped: DroppedEmployee[] }
-  | { type: 'exit-card-drawn'; card: ExitCard | null }
+  | { type: 'exit-chosen'; teamIndex: number; exitCard: ExitCard }
   | { type: 'error'; message: string };
 
 // ===========================================

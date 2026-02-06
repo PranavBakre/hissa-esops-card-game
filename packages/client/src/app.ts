@@ -363,9 +363,12 @@ function handleMessage(msg: ServerMessage): void {
       showToast(`${msg.dropped.length} employees entering secondary pool`, 'warning');
       break;
 
-    case 'exit-card-drawn':
-      if (msg.card) {
-        showToast(`Exit: ${msg.card.name} (${msg.card.multiplier}x)!`, 'success');
+    case 'exit-chosen':
+      if (state.gameState && msg.exitCard) {
+        state.gameState.teams[msg.teamIndex].exitChoice = msg.exitCard;
+        const team = state.gameState.teams[msg.teamIndex];
+        showToast(`${team.name} chose ${msg.exitCard.name} (${msg.exitCard.multiplier}x)`, 'success');
+        render();
       }
       break;
 
@@ -470,6 +473,6 @@ export function dropEmployeeAction(employeeId: number): void {
 }
 
 // Exit Actions
-export function drawExit(): void {
-  send({ type: 'draw-exit' });
+export function selectExit(exitId: number): void {
+  send({ type: 'select-exit', exitId });
 }

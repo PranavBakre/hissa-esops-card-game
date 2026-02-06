@@ -80,6 +80,9 @@ export function createInitialState(config: GameConfig): GameState {
     currentGain: 0,
     isMarketLeader: false,
     marketLeaderCount: 0,
+
+    exitChoice: null,
+    preExitValuation: 0,
   }));
 
   // Shuffle decks
@@ -177,7 +180,8 @@ export function isPhaseComplete(state: GameState): boolean {
       return state.secondaryPool.length === 0;
 
     case 'exit':
-      return state.exitCard !== null;
+      // All active teams must have chosen their exit strategy
+      return state.teams.every((t) => t.isDisqualified || t.exitChoice !== null);
 
     case 'winner':
       return false; // End state
@@ -410,14 +414,18 @@ export function closeBidding(state: GameState): GameState {
 
   if (newState.currentBid) {
     const winningTeam = newState.teams[newState.currentBid.teamIndex];
+    const bidAmount = newState.currentBid.amount;
+
+    // Apply Ops ESOP discount (10% off after first Ops hire)
+    const effectiveCost = getEffectiveEsopCost(winningTeam, bidAmount);
 
     // Award card to winner
     const hiredEmployee = {
       ...currentCard,
-      bidAmount: newState.currentBid.amount,
+      bidAmount: bidAmount,
     };
     winningTeam.employees.push(hiredEmployee);
-    winningTeam.esopRemaining -= newState.currentBid.amount;
+    winningTeam.esopRemaining -= effectiveCost;
 
     // Check if team is complete
     if (winningTeam.employees.length >= GAME.EMPLOYEES_PER_TEAM) {
@@ -475,6 +483,17 @@ export function skipCard(state: GameState): GameState {
 // ===========================================
 // Query Functions
 // ===========================================
+
+// Ops ESOP Discount: 10% discount after first Ops hire
+export function getOpsDiscount(team: Team): number {
+  const hasOps = team.employees.some((emp) => emp.category === 'Ops');
+  return hasOps ? 0.1 : 0;
+}
+
+export function getEffectiveEsopCost(team: Team, bidAmount: number): number {
+  const discount = getOpsDiscount(team);
+  return Math.round(bidAmount * (1 - discount) * 100) / 100;
+}
 
 export function canTeamAct(state: GameState, teamIndex: number): boolean {
   const team = state.teams[teamIndex];
@@ -700,14 +719,20 @@ export function applyMarketLeaderBonus(state: GameState): GameState {
     team.isMarketLeader = false;
   });
 
-  // Find top 2 teams by valuation
+  // Find top 2 teams by GAINS (not valuation) - V1 behavior
+  // Sort by gains descending, use valuation as tiebreaker
   const activeTeams = newState.teams
     .map((t, i) => ({ team: t, index: i }))
     .filter(({ team }) => !team.isDisqualified)
-    .sort((a, b) => b.team.valuation - a.team.valuation);
+    .sort((a, b) => {
+      if (b.team.currentGain !== a.team.currentGain) {
+        return b.team.currentGain - a.team.currentGain;
+      }
+      return b.team.valuation - a.team.valuation;
+    });
 
   // Top 2 get market leader status and bonus
-  const leaderBonus = 0.05; // 5% bonus
+  const leaderBonus = 0.20; // 20% bonus
   activeTeams.slice(0, 2).forEach(({ team }) => {
     team.isMarketLeader = true;
     team.marketLeaderCount++;
@@ -791,14 +816,18 @@ export function closeSecondaryBidding(state: GameState): GameState {
 
   if (newState.currentBid) {
     const winningTeam = newState.teams[newState.currentBid.teamIndex];
+    const bidAmount = newState.currentBid.amount;
+
+    // Apply Ops ESOP discount (10% off after first Ops hire)
+    const effectiveCost = getEffectiveEsopCost(winningTeam, bidAmount);
 
     // Award card to winner
     const hiredEmployee = {
       ...currentCard,
-      bidAmount: newState.currentBid.amount,
+      bidAmount: bidAmount,
     };
     winningTeam.employees.push(hiredEmployee);
-    winningTeam.esopRemaining -= newState.currentBid.amount;
+    winningTeam.esopRemaining -= effectiveCost;
   }
 
   // Move to next card
@@ -817,25 +846,43 @@ export function closeSecondaryBidding(state: GameState): GameState {
 // Exit Phase
 // ===========================================
 
-export function drawExitCard(state: GameState): GameState {
-  const newState = deepClone(state);
+export function getAvailableExitCards(): typeof exitCards {
+  return exitCards;
+}
 
-  // Pick random exit card
-  const randomIndex = Math.floor(Math.random() * exitCards.length);
-  newState.exitCard = exitCards[randomIndex];
+export function chooseExit(
+  state: GameState,
+  teamIndex: number,
+  exitId: number
+): GameState {
+  const newState = deepClone(state);
+  const team = newState.teams[teamIndex];
+
+  if (team.isDisqualified) return state;
+  if (team.exitChoice !== null) return state; // Already chosen
+
+  // Find the exit card
+  const exitCard = exitCards.find((c) => c.id === exitId);
+  if (!exitCard) return state;
+
+  // Store pre-exit valuation and set choice
+  team.preExitValuation = team.valuation;
+  team.exitChoice = exitCard;
 
   return newState;
 }
 
-export function applyExitMultiplier(state: GameState): GameState {
+export function allExitsChosen(state: GameState): boolean {
+  return state.teams.every((t) => t.isDisqualified || t.exitChoice !== null);
+}
+
+export function applyExitMultipliers(state: GameState): GameState {
   const newState = deepClone(state);
 
-  if (!newState.exitCard) return state;
-
-  // Apply multiplier to all active teams
+  // Apply each team's individual exit multiplier
   newState.teams.forEach((team) => {
-    if (!team.isDisqualified && newState.exitCard) {
-      team.valuation = Math.round(team.valuation * newState.exitCard.multiplier);
+    if (!team.isDisqualified && team.exitChoice) {
+      team.valuation = Math.round(team.valuation * team.exitChoice.multiplier);
     }
   });
 

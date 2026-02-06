@@ -22,7 +22,7 @@ import {
   selectWildcard,
   drawMarket,
   dropEmployeeAction,
-  drawExit,
+  selectExit,
 } from './app';
 
 // ===========================================
@@ -1004,35 +1004,65 @@ function renderSecondaryHire(): string {
 // Exit Phase
 // ===========================================
 
+// Exit cards available for selection (from data.ts)
+const EXIT_CARDS = [
+  { id: 1, name: 'IPO', multiplier: 2.0, description: 'Go public with a massive initial public offering!' },
+  { id: 2, name: 'Acquisition', multiplier: 1.5, description: 'Get acquired by a tech giant.' },
+  { id: 3, name: 'Strategic Merger', multiplier: 1.3, description: 'Merge with a complementary company.' },
+  { id: 4, name: 'Private Equity Buyout', multiplier: 1.2, description: 'Sell to a private equity firm.' },
+  { id: 5, name: 'Management Buyout', multiplier: 0.8, description: 'The management team buys out investors.' },
+  { id: 6, name: 'Fire Sale', multiplier: 0.5, description: 'Desperate times call for desperate measures.' },
+];
+
 function renderExitPhase(): string {
   if (!state.gameState) return '';
 
-  const exitCard = state.gameState.exitCard;
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+  const hasChosen = myTeam && myTeam.exitChoice !== null;
 
   return `
     <div class="exit-phase">
       <h2>Exit Phase</h2>
-      <p class="phase-description">Time to exit! Draw the exit card to determine your multiplier.</p>
+      <p class="phase-description">Choose your exit strategy! Each team selects their own exit multiplier.</p>
 
-      ${!exitCard ? `
-        ${state.isHost ? `
-          <div class="exit-draw">
-            <button class="btn btn-primary btn-large" id="draw-exit-btn">
-              Draw Exit Card
-            </button>
-          </div>
-        ` : `
-          <p class="summary-note">Waiting for host to draw exit card...</p>
-        `}
-      ` : `
-        <div class="exit-result">
-          <div class="exit-card">
-            <div class="exit-type">${exitCard.name}</div>
-            <div class="exit-multiplier">${exitCard.multiplier}x</div>
-            <div class="exit-desc">${exitCard.description}</div>
+      ${myTeam && !myTeam.isDisqualified && !hasChosen ? `
+        <div class="exit-selection">
+          <h3>Select Your Exit Strategy</h3>
+          <div class="exit-cards-grid">
+            ${EXIT_CARDS.map((card) => `
+              <div class="exit-card-option" data-exit-id="${card.id}">
+                <div class="exit-type">${card.name}</div>
+                <div class="exit-multiplier">${card.multiplier}x</div>
+                <div class="exit-desc">${card.description}</div>
+              </div>
+            `).join('')}
           </div>
         </div>
-      `}
+      ` : myTeam && !myTeam.isDisqualified && hasChosen ? `
+        <div class="exit-chosen">
+          <h3>Exit Choice Submitted</h3>
+          <div class="exit-card selected">
+            <div class="exit-type">${myTeam.exitChoice?.name}</div>
+            <div class="exit-multiplier">${myTeam.exitChoice?.multiplier}x</div>
+            <div class="exit-desc">${myTeam.exitChoice?.description}</div>
+          </div>
+          <p>Waiting for other teams to select their exit...</p>
+        </div>
+      ` : '<p>You are spectating or disqualified.</p>'}
+
+      <div class="exit-status">
+        <h3>Exit Status</h3>
+        ${state.gameState.teams.map((team, i) => {
+          const hasChosenExit = team.exitChoice !== null;
+          return team.isDisqualified ? '' : `
+            <div class="exit-status-item ${hasChosenExit ? 'chosen' : 'pending'}">
+              <span class="team-dot" style="background: ${team.color}"></span>
+              <span>${team.name}</span>
+              <span class="status">${hasChosenExit ? `${team.exitChoice?.name} (${team.exitChoice?.multiplier}x)` : 'Selecting...'}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
     </div>
   `;
 }
@@ -1330,8 +1360,25 @@ function attachSecondaryDropListeners(): void {
 }
 
 function attachExitListeners(): void {
-  document.getElementById('draw-exit-btn')?.addEventListener('click', () => {
-    drawExit();
+  document.querySelectorAll('.exit-card-option').forEach((card) => {
+    card.addEventListener('click', () => {
+      const exitId = card.getAttribute('data-exit-id');
+      if (exitId) {
+        // Add visual selection
+        document.querySelectorAll('.exit-card-option').forEach((c) => {
+          c.classList.remove('selected');
+        });
+        card.classList.add('selected');
+
+        // Confirm and select
+        const exitName = card.querySelector('.exit-type')?.textContent ?? 'this exit';
+        if (confirm(`Select "${exitName}" as your exit strategy?`)) {
+          selectExit(parseInt(exitId, 10));
+        } else {
+          card.classList.remove('selected');
+        }
+      }
+    });
   });
 }
 
