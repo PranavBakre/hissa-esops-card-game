@@ -1,0 +1,20 @@
+{
+  "name": "esop-wars-v2",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:worker\" \"npm run dev:client\"",
+    "dev:worker": "npm run dev -w @esop-wars/worker",
+    "dev:client": "npm run dev -w @esop-wars/client",
+    "build": "npm run build --workspaces",
+    "deploy": "npm run deploy -w @esop-wars/worker && npm run deploy -w @esop-wars/client",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,20 @@
+name = "esop-wars"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+preview_urls = false
+
+routes = [
+  { pattern = "esop-game-api.psbakre.dev", custom_domain = true }
+]
+
+[durable_objects]
+bindings = [
+  { name = "GAME_ROOM", class_name = "GameRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["GameRoom"]
+
+[vars]
+ALLOWED_ORIGIN = "https://esop-game.psbakre.dev"
