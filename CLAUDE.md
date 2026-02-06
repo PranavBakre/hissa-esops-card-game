@@ -19,8 +19,7 @@ ESOP Wars is a multiplayer card game where 5 teams compete to build the highest-
 | `docs/architecture.md`            | v1 code structure, game state shape, phase flow    |
 | `docs/feature-map.md`             | v1 features and functions                          |
 | `docs/archive/`                   | Implemented feature docs (v2 build, bots, etc.)    |
-| `docs/ideas/v2-ui-facelift.md`    | UI redesign, player guidance, rulebook             |
-| `docs/mockups/ui-facelift.html`   | Interactive HTML mockup for UI facelift            |
+| `docs/ideas/v2-ui-facelift.md`    | UI redesign, player guidance, rulebook, design system |
 
 ## v2 Source Files (packages/)
 

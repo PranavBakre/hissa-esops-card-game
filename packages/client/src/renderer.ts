@@ -29,6 +29,71 @@ import {
 } from './app';
 
 // ===========================================
+// Phase Intro Banner State
+// ===========================================
+
+const seenPhases = new Set<Phase>();
+const dismissedPhases = new Set<Phase>();
+
+const PHASE_INTRO_TEXT: Partial<Record<Phase, { icon: string; title: string; desc: string }>> = {
+  registration: {
+    icon: '&#128221;',
+    title: 'Registration',
+    desc: 'Name your startup and describe the problem you\'re solving.',
+  },
+  setup: {
+    icon: '&#127183;',
+    title: 'Draft Your Cards',
+    desc: 'Draft segment and idea cards to define your startup\'s identity. Drop a card, then draw or skip.',
+  },
+  'setup-lock': {
+    icon: '&#128274;',
+    title: 'Lock Your Selection',
+    desc: 'Pick your final segment + idea combo. Matching pairs unlock bonus multipliers!',
+  },
+  auction: {
+    icon: '&#128176;',
+    title: 'Auction',
+    desc: 'Bid ESOP equity to hire employees. Higher skills = bigger market impact, but ESOP is limited.',
+  },
+  seed: {
+    icon: '&#127793;',
+    title: 'Seed Round',
+    desc: 'Market conditions are revealed. Your employees\' skills determine how your valuation changes.',
+  },
+  early: {
+    icon: '&#128200;',
+    title: 'Early Stage',
+    desc: 'Market conditions are revealed. Your employees\' skills determine how your valuation changes.',
+  },
+  'secondary-drop': {
+    icon: '&#128100;',
+    title: 'Secondary Drop',
+    desc: 'Choose one employee to release. They\'ll enter the secondary market for all teams to bid on.',
+  },
+  'secondary-hire': {
+    icon: '&#129309;',
+    title: 'Secondary Hire',
+    desc: 'Bid on employees from the secondary pool. Last chance to strengthen your team.',
+  },
+  mature: {
+    icon: '&#127942;',
+    title: 'Mature Stage',
+    desc: 'Market conditions are revealed. Your employees\' skills determine how your valuation changes.',
+  },
+  exit: {
+    icon: '&#127922;',
+    title: 'Exit',
+    desc: 'Draw your exit card! Your fate is sealed by luck \u2014 will you IPO or Fire Sale?',
+  },
+  winner: {
+    icon: '&#127881;',
+    title: 'Game Over!',
+    desc: 'See who built the best startup.',
+  },
+};
+
+// ===========================================
 // DOM Type Guards
 // ===========================================
 
@@ -78,30 +143,37 @@ export function render(): void {
 function renderHome(app: HTMLElement): void {
   app.innerHTML = `
     <div class="home-screen">
-      <h1 class="game-title">ESOP Wars</h1>
-      <p class="game-subtitle">Build the highest-valued startup</p>
+      <div class="game-logo"><span class="logo-esop">ESOP</span> <span class="logo-wars">Wars</span></div>
+      <div class="game-tagline">Build the highest-valued startup</div>
 
       <div class="home-actions">
-        <button class="btn btn-primary btn-large" id="create-room-btn">
+        <button class="btn btn-primary btn-lg" style="width:100%" id="create-room-btn">
           Create Room
         </button>
 
-        <div class="join-room-form">
+        <div class="join-form">
           <input
             type="text"
             id="room-code-input"
-            placeholder="Enter room code"
+            placeholder="CODE"
             maxlength="4"
-            class="input-room-code"
+            class="input-code"
           />
-          <button class="btn btn-secondary" id="join-room-btn">
+          <button class="btn btn-secondary btn-lg" id="join-room-btn">
             Join
           </button>
         </div>
 
-        <button class="btn btn-secondary btn-large" id="watch-bot-game-btn">
+        <div class="home-divider">or</div>
+
+        <button class="btn btn-secondary btn-lg" style="width:100%" id="watch-bot-game-btn">
           Watch Bot Game
         </button>
+
+        <div class="home-links">
+          <a id="how-to-play-link">How to Play</a>
+          <a id="about-link">About</a>
+        </div>
       </div>
     </div>
   `;
@@ -136,6 +208,14 @@ function renderHome(app: HTMLElement): void {
       document.getElementById('join-room-btn')?.click();
     }
   });
+
+  document.getElementById('how-to-play-link')?.addEventListener('click', () => {
+    openRulesModal('overview');
+  });
+
+  document.getElementById('about-link')?.addEventListener('click', () => {
+    openAboutModal();
+  });
 }
 
 // ===========================================
@@ -150,27 +230,28 @@ function renderLobby(app: HTMLElement): void {
     const isMyTeam = state.myTeamIndex === index;
     const isTaken = !!player && player.playerId !== state.playerId;
 
+    const statusClass = isMyTeam ? 'you' : '';
+    const statusText = player
+      ? (player.playerId === state.playerId ? 'You' : player.playerName)
+      : 'Empty';
+
     return `
       <div
         class="team-slot ${isMyTeam ? 'selected' : ''} ${isTaken ? 'taken' : ''}"
         data-team-index="${index}"
-        style="--team-color: ${def.color}"
       >
-        <div class="team-color-bar"></div>
-        <div class="team-name">${def.name}</div>
-        <div class="team-player">
-          ${player ? (player.playerId === state.playerId ? 'You' : player.playerName) : 'Empty'}
-        </div>
-        ${!player && !isMyTeam ? '<div class="team-action">Click to join</div>' : ''}
+        <div class="team-color-dot" style="background: ${def.color}"></div>
+        <div class="team-slot-name">${def.name}</div>
+        <div class="team-slot-status ${statusClass}">${statusText}</div>
       </div>
     `;
   }).join('');
 
   const playersList = state.room.players
     .map((p) => `
-      <div class="player-item ${!p.connected ? 'disconnected' : ''}">
-        <span class="player-name">${p.playerName}</span>
-        ${p.isHost ? '<span class="host-badge">Host</span>' : ''}
+      <div class="player-list-item ${!p.connected ? 'disconnected' : ''}">
+        <div class="player-list-name">${p.playerName}</div>
+        ${p.isHost ? '<span class="badge badge-host">Host</span>' : ''}
         ${!p.connected ? '<span class="status-badge">Offline</span>' : ''}
       </div>
     `)
@@ -179,23 +260,21 @@ function renderLobby(app: HTMLElement): void {
   app.innerHTML = `
     <div class="lobby-screen">
       <div class="lobby-header">
-        <h2>Room: ${state.room.code}</h2>
-        <button class="btn btn-text" id="leave-btn">Leave</button>
+        <h2>Room <span class="lobby-code">${state.room.code}</span></h2>
+        <button class="btn btn-ghost" id="leave-btn">Leave</button>
       </div>
 
-      <div class="lobby-content">
-        <div class="team-selection">
-          <h3>Select Your Team</h3>
+      <div class="lobby-grid">
+        <div>
+          <div class="lobby-section-title">Teams</div>
           <div class="team-slots">
             ${teamSlots}
           </div>
         </div>
 
-        <div class="players-panel">
-          <h3>Players (${state.room.players.length})</h3>
-          <div class="players-list">
-            ${playersList}
-          </div>
+        <div>
+          <div class="lobby-section-title">Players (${state.room.players.length})</div>
+          ${playersList}
         </div>
       </div>
 
@@ -203,19 +282,19 @@ function renderLobby(app: HTMLElement): void {
         ${state.isHost ? `
           <div class="lobby-start-buttons">
             <button
-              class="btn btn-primary btn-large"
+              class="btn btn-primary btn-lg"
               id="start-game-btn"
               ${state.room.players.some((p) => p.teamIndex !== null) ? '' : 'disabled'}
             >
               Start Game
             </button>
-            <button class="btn btn-secondary btn-large" id="start-bot-game-btn">
+            <button class="btn btn-secondary btn-lg" id="start-bot-game-btn">
               Start Bot Game
             </button>
           </div>
-          <p class="lobby-hint">Empty team slots will be filled with bots</p>
+          <div class="lobby-hint">Empty team slots will be filled with bots</div>
         ` : `
-          <p class="lobby-hint">Waiting for host to start the game...</p>
+          <div class="lobby-hint">Waiting for host to start the game...</div>
         `}
       </div>
     </div>
@@ -288,9 +367,11 @@ function renderGame(app: HTMLElement): void {
   app.innerHTML = `
     <div class="game-screen">
       ${renderPhaseBar()}
+      ${renderMobileTeamStrip()}
       <div class="game-layout">
         ${renderTeamsSidebar()}
         <div class="game-main">
+          ${renderPhaseIntro()}
           ${content}
         </div>
       </div>
@@ -314,6 +395,22 @@ function renderGame(app: HTMLElement): void {
     });
   });
 
+  // Phase intro dismiss listener
+  document.getElementById('dismiss-phase-intro')?.addEventListener('click', () => {
+    if (state.gameState) {
+      dismissedPhases.add(state.gameState.phase);
+    }
+    const banner = document.getElementById('phase-intro-banner');
+    if (banner) {
+      banner.style.display = 'none';
+    }
+  });
+
+  // Rules button listener
+  document.getElementById('rules-btn')?.addEventListener('click', () => {
+    openRulesModal();
+  });
+
   // Attach event listeners based on phase
   attachPhaseEventListeners(phase);
 }
@@ -322,45 +419,47 @@ function renderGame(app: HTMLElement): void {
 // Phase Bar
 // ===========================================
 
+function getPhaseDetail(): string {
+  if (!state.gameState) return '';
+  const phase = state.gameState.phase;
+
+  if (phase === 'auction' || phase === 'secondary-hire') {
+    const deck = phase === 'auction' ? state.gameState.employeeDeck : state.gameState.secondaryPool;
+    return `Card ${state.gameState.currentCardIndex + 1} of ${deck.length}`;
+  }
+  if (phase === 'setup') {
+    return `Round ${state.gameState.setupRound}/3`;
+  }
+  return '';
+}
+
 function renderPhaseBar(): string {
   if (!state.gameState) return '';
 
-  const mainPhases: Phase[] = [
-    'registration',
-    'setup',
-    'auction',
-    'seed',
-    'early',
-    'mature',
-    'exit',
-    'winner',
-  ];
-
-  const currentIndex = mainPhases.indexOf(state.gameState.phase);
+  const phaseLabel = PHASE_LABELS[state.gameState.phase] || state.gameState.phase;
+  const phaseDetail = getPhaseDetail();
 
   return `
-    <div class="phase-bar">
-      <div class="phase-bar-left">
-        <button class="btn btn-text btn-exit-room" id="exit-room-btn" title="Exit Room">
-          ← Exit
-        </button>
-        <span class="room-code">Room: ${state.room?.code ?? ''}</span>
-        ${state.spectatorMode ? '<span class="spectator-badge">Spectator Mode</span>' : ''}
+    <div class="game-header">
+      <div class="header-left">
+        <button class="header-exit" id="exit-room-btn">&#8592; Exit</button>
+        <span class="header-room-code">${state.room?.code ?? ''}</span>
+        ${state.spectatorMode ? '<span class="spectator-badge">Spectator</span>' : ''}
       </div>
-      <div class="phase-bar-phases">
-        ${mainPhases.map((phase, index) => `
-          <div class="phase-item ${state.gameState?.phase === phase ? 'active' : ''} ${index < currentIndex ? 'completed' : ''}">
-            ${PHASE_LABELS[phase] || phase}
+      <div class="header-center">
+        <span class="header-phase">${phaseLabel}</span>
+        ${phaseDetail ? `<span class="header-phase-detail">${phaseDetail}</span>` : ''}
+      </div>
+      <div class="header-right">
+        ${state.spectatorMode ? `
+          <div class="speed-controls">
+            <button class="btn-speed ${state.gameSpeed === 'normal' ? 'active' : ''}" data-speed="normal">Normal</button>
+            <button class="btn-speed ${state.gameSpeed === 'fast' ? 'active' : ''}" data-speed="fast">Fast</button>
+            <button class="btn-speed ${state.gameSpeed === 'instant' ? 'active' : ''}" data-speed="instant">Instant</button>
           </div>
-        `).join('')}
+        ` : ''}
+        <button class="btn-rules" id="rules-btn" title="Rules">?</button>
       </div>
-      ${state.spectatorMode ? `
-        <div class="speed-controls">
-          <button class="btn btn-speed ${state.gameSpeed === 'normal' ? 'active' : ''}" data-speed="normal">Normal</button>
-          <button class="btn btn-speed ${state.gameSpeed === 'fast' ? 'active' : ''}" data-speed="fast">Fast</button>
-          <button class="btn btn-speed ${state.gameSpeed === 'instant' ? 'active' : ''}" data-speed="instant">Instant</button>
-        </div>
-      ` : ''}
     </div>
   `;
 }
@@ -369,28 +468,208 @@ function renderPhaseBar(): string {
 // Teams Sidebar
 // ===========================================
 
+function getCategoryColor(category: string): string {
+  switch (category) {
+    case 'Engineering': return 'var(--cat-engineering)';
+    case 'Product': return 'var(--cat-product)';
+    case 'Sales': return 'var(--cat-sales)';
+    case 'Ops': return 'var(--cat-ops)';
+    case 'Finance': return 'var(--cat-finance)';
+    default: return 'var(--text-muted)';
+  }
+}
+
 function renderTeamsSidebar(): string {
   if (!state.gameState) return '';
 
   return `
     <div class="teams-sidebar">
-      <h3>Teams</h3>
-      ${state.gameState.teams.map((team, index) => `
-        <div
-          class="sidebar-team ${state.myTeamIndex === index ? 'my-team' : ''} ${team.isDisqualified ? 'disqualified' : ''}"
-          style="--team-color: ${team.color}"
-        >
-          <div class="sidebar-team-header">
-            <span class="team-name">${team.name}</span>
-            ${team.isBot ? '<span class="bot-badge">Bot</span>' : ''}
+      <div class="sidebar-label">Teams</div>
+      ${state.gameState.teams.map((team, index) => {
+        const isMe = state.myTeamIndex === index;
+        const empDots = [];
+        for (let i = 0; i < 3; i++) {
+          const emp = team.employees[i];
+          if (emp) {
+            empDots.push(`<div class="emp-dot" style="background: ${getCategoryColor(emp.category)}"></div>`);
+          } else {
+            empDots.push(`<div class="emp-dot" style="background: var(--border-default); border: 2px dashed var(--text-muted)"></div>`);
+          }
+        }
+
+        return `
+          <div
+            class="sidebar-team ${isMe ? 'my-team' : ''} ${team.isDisqualified ? 'disqualified' : ''}"
+            style="--team-color: ${team.color}"
+          >
+            <div class="sidebar-team-top">
+              <div class="sidebar-team-name">${team.name}</div>
+              ${isMe ? '<span class="badge badge-you">You</span>' : ''}
+              ${team.isBot ? '<span class="badge badge-bot">Bot</span>' : ''}
+            </div>
+            <div class="sidebar-valuation">${formatCurrency(team.valuation)}</div>
+            <div class="sidebar-meta">
+              <span>${team.esopRemaining.toFixed(1)}% ESOP</span>
+              <span>${team.employees.length}/3 hired</span>
+            </div>
+            <div class="sidebar-employees">${empDots.join('')}</div>
+            ${!team.wildcardUsed
+              ? '<div class="sidebar-wildcard">&#9733; Wildcard ready</div>'
+              : '<div class="sidebar-wildcard used">&#9733; Wildcard used</div>'
+            }
           </div>
-          <div class="team-valuation">${formatCurrency(team.valuation)}</div>
-          <div class="team-esop">${team.esopRemaining}% ESOP</div>
-          <div class="team-employees">${team.employees.length}/3 employees</div>
-        </div>
-      `).join('')}
+        `;
+      }).join('')}
     </div>
   `;
+}
+
+function renderPhaseIntro(): string {
+  if (!state.gameState) return '';
+
+  const phase = state.gameState.phase;
+  const intro = PHASE_INTRO_TEXT[phase];
+
+  // Don't show for summary phases or if no intro defined
+  if (!intro) return '';
+
+  // Don't show if already dismissed
+  if (dismissedPhases.has(phase)) return '';
+
+  // Mark as seen (for auto-dismiss timer)
+  if (!seenPhases.has(phase)) {
+    seenPhases.add(phase);
+    // Auto-dismiss after 5s
+    setTimeout(() => {
+      dismissedPhases.add(phase);
+      const banner = document.getElementById('phase-intro-banner');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }, 5000);
+  }
+
+  return `
+    <div class="phase-intro" id="phase-intro-banner">
+      <div class="phase-intro-icon">${intro.icon}</div>
+      <div class="phase-intro-text">
+        <h3>${intro.title}</h3>
+        <p>${intro.desc}</p>
+      </div>
+      <button class="phase-intro-dismiss" id="dismiss-phase-intro">&times;</button>
+    </div>
+  `;
+}
+
+function renderMobileTeamStrip(): string {
+  if (!state.gameState) return '';
+
+  return `
+    <div class="mobile-team-strip">
+      ${state.gameState.teams.map((team, index) => {
+        const isMe = state.myTeamIndex === index;
+        return `
+          <div class="mobile-team-chip ${isMe ? 'my-team' : ''}" style="--team-color: ${team.color}">
+            <span class="mobile-team-chip-name">${team.name}</span>
+            <span class="mobile-team-chip-val">${formatCurrency(team.valuation)}</span>
+            ${isMe ? '<span class="badge badge-you">You</span>' : ''}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+// ===========================================
+// Action Hint Helpers
+// ===========================================
+
+function getSetupHint(): string {
+  if (!state.gameState) return '';
+  const isMyTurn = state.myTeamIndex === state.gameState.setupDraftTurn;
+  const setupPhase = state.gameState.setupPhase;
+  if (!isMyTurn) {
+    return 'Wait for your turn to draft cards.';
+  }
+  if (setupPhase === 'drop') {
+    return 'Drop a card you don\'t want. You\'ll draw a replacement next.';
+  }
+  return 'Draw from Segment or Idea deck, or skip to keep your hand.';
+}
+
+function getAuctionHint(): string {
+  if (!state.gameState) return '';
+  const currentBid = state.gameState.currentBid;
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+  if (!myTeam) return 'Watch teams bid for employees.';
+  if (myTeam.employees.length >= 3) return 'You\'ve filled your team! Watch the remaining bids.';
+  if (!currentBid) {
+    return `Be the first to bid! Starting bid is 1% ESOP. You have <strong>${myTeam.esopRemaining.toFixed(1)}%</strong> remaining.`;
+  }
+  const bidderName = state.gameState.teams[currentBid.teamIndex].name;
+  return `Outbid <strong>${bidderName}</strong> or pass. You have <strong>${myTeam.esopRemaining.toFixed(1)}%</strong> ESOP remaining.`;
+}
+
+function getMarketHint(): string {
+  if (!state.gameState) return '';
+  const isWildcardPhase = state.gameState.wildcardPhase;
+  const hasResults = state.gameState.roundPerformance.length > 0;
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+
+  if (isWildcardPhase) {
+    if (!myTeam) return 'Teams are choosing their wildcard strategy.';
+    const hasSelected = state.myTeamIndex !== null &&
+      state.gameState.teamWildcardSelections[state.myTeamIndex] !== undefined;
+    if (hasSelected) return 'Your choice is locked in. Waiting for other teams...';
+    if (myTeam.wildcardUsed) return 'You\'ve already used your wildcard. Click <strong>Pass</strong> to continue.';
+    return 'This is your one-time wildcard. Use it when the stakes are highest!';
+  }
+
+  if (hasResults) {
+    return 'Market results are in! Review how your team performed this round.';
+  }
+
+  if (state.isHost) {
+    return 'Draw the market card to reveal this round\'s conditions.';
+  }
+  return 'Waiting for the host to draw the market card...';
+}
+
+function getSecondaryDropHint(): string {
+  if (!state.gameState) return '';
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+  if (!myTeam || myTeam.isDisqualified) return 'Watch teams release employees to the secondary market.';
+  const hasDropped = state.myTeamIndex !== null &&
+    state.gameState.droppedEmployees.some((d) => d.fromTeamIndex === state.myTeamIndex);
+  if (hasDropped) return 'Employee released! Waiting for other teams to choose...';
+  return 'Choose one employee to release. They\'ll enter the secondary market for all teams to bid on.';
+}
+
+function getSecondaryHireHint(): string {
+  if (!state.gameState) return '';
+  const currentBid = state.gameState.currentBid;
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+  if (!myTeam) return 'Watch teams bid on secondary market employees.';
+  if (!currentBid) {
+    return `Last chance to strengthen your team! Starting bid is 1% ESOP. You have <strong>${myTeam.esopRemaining.toFixed(1)}%</strong> remaining.`;
+  }
+  const bidderName = state.gameState.teams[currentBid.teamIndex].name;
+  return `Outbid <strong>${bidderName}</strong> or pass. You have <strong>${myTeam.esopRemaining.toFixed(1)}%</strong> ESOP remaining.`;
+}
+
+function getExitHint(): string {
+  if (!state.gameState) return '';
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+  const isMyTurn = state.myTeamIndex !== null && state.gameState.currentExitTurn === state.myTeamIndex;
+
+  if (myTeam?.exitChoice) {
+    return `You drew <strong>${myTeam.exitChoice.name}</strong>! ${myTeam.exitChoice.multiplier}x multiplier applied to your valuation.`;
+  }
+  if (isMyTurn) {
+    return 'It\'s your turn! Click to draw your exit card. Good luck!';
+  }
+  if (!myTeam) return 'Watch teams draw their exit cards.';
+  return 'Wait for your turn to draw an exit card...';
 }
 
 // ===========================================
@@ -409,7 +688,7 @@ function renderRegistration(): string {
   return `
     <div class="registration-phase">
       <h2>Registration</h2>
-      <p class="phase-description">Register your startup details</p>
+      <p class="action-hint">Name your startup and describe the problem you're solving.</p>
 
       ${myTeam && !isRegistered ? `
         <form class="registration-form" id="registration-form">
@@ -480,7 +759,7 @@ function renderSetupPhase(): string {
   return `
     <div class="setup-phase">
       <h2>Setup Drafting - Round ${round}/3</h2>
-      <p class="phase-description">Build your startup's identity</p>
+      <p class="action-hint">${getSetupHint()}</p>
 
       <div class="turn-indicator ${isMyTurn ? 'your-turn' : ''}">
         ${isMyTurn
@@ -544,7 +823,7 @@ function renderSetupLock(): string {
   return `
     <div class="setup-lock-phase">
       <h2>Lock Your Selection</h2>
-      <p class="phase-description">Choose your final segment and idea combination</p>
+      <p class="action-hint">Pick your final segment + idea combo. <strong>Matching pairs unlock bonus multipliers!</strong></p>
 
       ${myTeam && !isLocked ? `
         <div class="lock-selection">
@@ -619,7 +898,7 @@ function renderSetupSummary(): string {
   return `
     <div class="setup-summary">
       <h2>Setup Complete</h2>
-      <p class="phase-description">Review all team selections before the auction</p>
+      <p class="action-hint">Review all team selections. The auction is next \u2014 plan your hiring budget!</p>
 
       <div class="summary-grid">
         ${state.gameState.teams.map((team) => `
@@ -676,29 +955,35 @@ function renderAuction(): string {
 
   const minBid = currentBid ? currentBid.amount + 1 : 1;
 
+  const hardPct = (currentCard.hardSkill * 100).toFixed(0);
+  const categoryClass = currentCard.category.toLowerCase();
+  const progressPct = ((state.gameState.currentCardIndex + 1) / state.gameState.employeeDeck.length * 100).toFixed(0);
+
   return `
     <div class="auction-phase">
       <h2>Employee Auction</h2>
-      <p class="phase-description">Bid ESOP to hire employees for your team</p>
+      <p class="action-hint">${getAuctionHint()}</p>
 
-      <div class="auction-card">
-        <div class="employee-card">
-          <div class="employee-category">${currentCard.category}</div>
-          <div class="employee-name">${currentCard.name}</div>
-          <div class="employee-role">${currentCard.role}</div>
-          <div class="employee-stats">
-            <div class="stat">
-              <span class="stat-label">Hard Skill</span>
-              <span class="stat-value">${(currentCard.hardSkill * 100).toFixed(0)}%</span>
+      <div class="employee-card" style="--card-accent: ${getCategoryColor(currentCard.category)}">
+        <span class="emp-category-badge ${categoryClass}">${currentCard.category}</span>
+        <div class="emp-name">${currentCard.name}</div>
+        <div class="emp-role">${currentCard.role}</div>
+
+        <div class="skill-bar-section">
+          <div class="skill-row">
+            <div class="skill-label">
+              <span>Hard Skill</span>
+              <span>${hardPct}%</span>
             </div>
-            <div class="soft-skills">
-              ${Object.entries(currentCard.softSkills).map(([skill, value]) => `
-                <div class="soft-skill">
-                  <span>${skill}</span>
-                  <span>${(value * 100).toFixed(0)}%</span>
-                </div>
-              `).join('')}
+            <div class="skill-bar-track">
+              <div class="skill-bar-fill hard" style="width: ${hardPct}%"></div>
             </div>
+          </div>
+
+          <div class="soft-skill-pills">
+            ${Object.entries(currentCard.softSkills).map(([skill, value]) =>
+              `<span class="soft-pill">${skill} <strong>${(value * 100).toFixed(0)}%</strong></span>`
+            ).join('')}
           </div>
         </div>
       </div>
@@ -717,16 +1002,16 @@ function renderAuction(): string {
 
       ${canBid ? `
         <div class="bid-controls">
-          <div class="bid-increment-buttons">
-            <button class="btn btn-secondary" id="bid-inc-05">+0.5%</button>
-            <button class="btn btn-secondary" id="bid-inc-1">+1%</button>
-            <button class="btn btn-secondary" id="bid-inc-2">+2%</button>
+          <div class="bid-inc-btns">
+            <button class="bid-inc-btn" id="bid-inc-05">+0.5</button>
+            <button class="bid-inc-btn" id="bid-inc-1">+1</button>
+            <button class="bid-inc-btn" id="bid-inc-2">+2</button>
           </div>
-          <div class="bid-input-group">
+          <div class="bid-input-wrap">
             <input type="number" id="bid-amount" value="${minBid}" min="${minBid}" max="${myTeam.esopRemaining}" step="0.5">
-            <span class="bid-suffix">%</span>
+            <span class="suffix">%</span>
           </div>
-          <div class="bid-buttons">
+          <div class="bid-actions">
             <button class="btn btn-primary" id="place-bid-btn">Place Bid</button>
             <button class="btn btn-secondary" id="pass-bid-btn">Pass</button>
           </div>
@@ -742,6 +1027,7 @@ function renderAuction(): string {
 
       <div class="auction-progress">
         Card ${state.gameState.currentCardIndex + 1} of ${state.gameState.employeeDeck.length}
+        <div class="progress-track"><div class="progress-fill" style="width: ${progressPct}%"></div></div>
       </div>
     </div>
   `;
@@ -753,7 +1039,7 @@ function renderAuctionSummary(): string {
   return `
     <div class="auction-summary">
       <h2>Auction Complete</h2>
-      <p class="phase-description">Review hired employees before market rounds</p>
+      <p class="action-hint">Teams are set! Market rounds begin next \u2014 your employees' skills will be tested.</p>
 
       <div class="summary-grid">
         ${state.gameState.teams.map((team) => `
@@ -810,46 +1096,62 @@ function renderMarketRound(): string {
   const hasResults = state.gameState.roundPerformance.length > 0;
   const needsDraw = !isWildcardPhase && !hasResults;
 
+  const marketCard = state.gameState.currentMarketCard;
+
   return `
     <div class="market-round">
       <h2>${phaseName} Round</h2>
-      <p class="phase-description">${getMarketPhaseDescription(phase)}</p>
+      <p class="action-hint">${getMarketHint()}</p>
 
-      ${needsDraw ? `
-        <div class="market-draw">
-          ${state.spectatorMode ? `
-            <p class="summary-note">Drawing market card...</p>
-          ` : state.isHost ? `
-            <button class="btn btn-primary btn-large" id="draw-market-btn">
-              Draw Market Card
-            </button>
-          ` : `
-            <p class="summary-note">Waiting for host to draw market card...</p>
-          `}
-        </div>
-      ` : ''}
+      <div class="market-layout">
+        ${needsDraw ? `
+          <div class="market-draw">
+            ${state.spectatorMode ? `
+              <p class="summary-note">Drawing market card...</p>
+            ` : state.isHost ? `
+              <button class="btn btn-primary btn-large" id="draw-market-btn">
+                Draw Market Card
+              </button>
+            ` : `
+              <p class="summary-note">Waiting for host to draw market card...</p>
+            `}
+          </div>
+        ` : ''}
 
-      ${hasResults ? `
-        <div class="market-results">
-          <h3>Round Results</h3>
+        ${marketCard ? `
+          <div class="market-card-reveal">
+            <div class="market-card-label">Market Card</div>
+            <div class="market-card-name">${marketCard.name}</div>
+            <div class="market-card-desc">${marketCard.description}</div>
+            <div class="market-modifiers">
+              ${Object.entries(marketCard.hardSkillModifiers)
+                .filter(([, v]) => v !== 0)
+                .map(([cat, v]) =>
+                  `<span class="modifier-pill ${v > 0 ? 'positive' : 'negative'}">${cat} ${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%</span>`
+                ).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        ${hasResults ? `
+          <div class="results-heading">Round Results</div>
           <div class="results-grid">
             ${state.gameState.roundPerformance.map((perf) => {
               const team = state.gameState?.teams[perf.teamIndex];
               if (!team) return '';
               return `
                 <div class="result-card" style="--team-color: ${team.color}">
-                  <div class="result-team">${team.name}</div>
+                  <div class="result-team-name">${team.name}</div>
                   <div class="result-change ${perf.gain >= 0 ? 'positive' : 'negative'}">
                     ${perf.gain >= 0 ? '+' : ''}${formatCurrency(perf.gain)}
                   </div>
-                  <div class="result-valuation">${formatCurrency(team.valuation)}</div>
-                  ${team.isMarketLeader ? '<div class="leader-badge">Market Leader</div>' : ''}
+                  <div class="result-val">${formatCurrency(team.valuation)}</div>
+                  ${team.isMarketLeader ? '<span class="leader-badge">Market Leader</span>' : ''}
                 </div>
               `;
             }).join('')}
           </div>
-        </div>
-      ` : ''}
+        ` : ''}
 
       ${isWildcardPhase ? `
         <div class="wildcard-phase">
@@ -894,17 +1196,9 @@ function renderMarketRound(): string {
           </div>
         </div>
       ` : ''}
+      </div>
     </div>
   `;
-}
-
-function getMarketPhaseDescription(phase: string): string {
-  switch (phase) {
-    case 'seed': return 'Seed stage - Early market conditions shape your startup';
-    case 'early': return 'Early stage - Growth pressures intensify';
-    case 'mature': return 'Mature stage - Final market test before exit';
-    default: return 'Market conditions affect your valuation';
-  }
 }
 
 // ===========================================
@@ -921,7 +1215,7 @@ function renderSecondaryDrop(): string {
   return `
     <div class="secondary-drop">
       <h2>Secondary Market - Drop Phase</h2>
-      <p class="phase-description">Choose an employee to release to the secondary market</p>
+      <p class="action-hint">${getSecondaryDropHint()}</p>
 
       ${myTeam && !myTeam.isDisqualified && !hasDropped ? `
         <div class="drop-selection">
@@ -994,21 +1288,35 @@ function renderSecondaryHire(): string {
   const canBid = myTeam && !myTeam.isDisqualified && myTeam.esopRemaining > 0;
   const minBid = currentBid ? currentBid.amount + 1 : 1;
 
-  return `
-    <div class="secondary-hire">
-      <h2>Secondary Market - Hiring</h2>
-      <p class="phase-description">Bid on employees from the secondary pool</p>
+  const hardPct = (currentCard.hardSkill * 100).toFixed(0);
+  const categoryClass = currentCard.category.toLowerCase();
+  const progressPct = ((state.gameState.currentCardIndex + 1) / pool.length * 100).toFixed(0);
 
-      <div class="auction-card">
-        <div class="employee-card secondary">
-          <div class="employee-category">${currentCard.category}</div>
-          <div class="employee-name">${currentCard.name}</div>
-          <div class="employee-role">${currentCard.role}</div>
-          <div class="employee-stats">
-            <div class="stat">
-              <span class="stat-label">Hard Skill</span>
-              <span class="stat-value">${(currentCard.hardSkill * 100).toFixed(0)}%</span>
+  return `
+    <div class="secondary-hire auction-phase">
+      <h2>Secondary Market - Hiring</h2>
+      <p class="action-hint">${getSecondaryHireHint()}</p>
+
+      <div class="employee-card" style="--card-accent: ${getCategoryColor(currentCard.category)}">
+        <span class="emp-category-badge ${categoryClass}">${currentCard.category}</span>
+        <div class="emp-name">${currentCard.name}</div>
+        <div class="emp-role">${currentCard.role}</div>
+
+        <div class="skill-bar-section">
+          <div class="skill-row">
+            <div class="skill-label">
+              <span>Hard Skill</span>
+              <span>${hardPct}%</span>
             </div>
+            <div class="skill-bar-track">
+              <div class="skill-bar-fill hard" style="width: ${hardPct}%"></div>
+            </div>
+          </div>
+
+          <div class="soft-skill-pills">
+            ${Object.entries(currentCard.softSkills).map(([skill, value]) =>
+              `<span class="soft-pill">${skill} <strong>${(value * 100).toFixed(0)}%</strong></span>`
+            ).join('')}
           </div>
         </div>
       </div>
@@ -1027,16 +1335,16 @@ function renderSecondaryHire(): string {
 
       ${canBid ? `
         <div class="bid-controls">
-          <div class="bid-increment-buttons">
-            <button class="btn btn-secondary" id="bid-inc-05">+0.5%</button>
-            <button class="btn btn-secondary" id="bid-inc-1">+1%</button>
-            <button class="btn btn-secondary" id="bid-inc-2">+2%</button>
+          <div class="bid-inc-btns">
+            <button class="bid-inc-btn" id="bid-inc-05">+0.5</button>
+            <button class="bid-inc-btn" id="bid-inc-1">+1</button>
+            <button class="bid-inc-btn" id="bid-inc-2">+2</button>
           </div>
-          <div class="bid-input-group">
+          <div class="bid-input-wrap">
             <input type="number" id="bid-amount" value="${minBid}" min="${minBid}" max="${myTeam.esopRemaining}" step="0.5">
-            <span class="bid-suffix">%</span>
+            <span class="suffix">%</span>
           </div>
-          <div class="bid-buttons">
+          <div class="bid-actions">
             <button class="btn btn-primary" id="place-bid-btn">Place Bid</button>
             <button class="btn btn-secondary" id="pass-bid-btn">Pass</button>
           </div>
@@ -1048,6 +1356,7 @@ function renderSecondaryHire(): string {
 
       <div class="auction-progress">
         Card ${state.gameState.currentCardIndex + 1} of ${pool.length}
+        <div class="progress-track"><div class="progress-fill" style="width: ${progressPct}%"></div></div>
       </div>
     </div>
   `;
@@ -1076,65 +1385,46 @@ function renderExitPhase(): string {
   return `
     <div class="exit-phase">
       <h2>Exit Phase</h2>
-      <p class="phase-description">Draw your exit card from the shuffled deck. Your fate is in the cards!</p>
+      <p class="action-hint">${getExitHint()}</p>
 
-      <div class="exit-draw-area">
-        ${currentTurn >= 0 ? `
-          <div class="exit-turn-indicator ${isMyTurn ? 'your-turn' : ''}">
-            ${isMyTurn
-              ? '<strong>Your turn to draw!</strong>'
-              : `Waiting for ${currentTeamName} to draw...`
-            }
-          </div>
-        ` : ''}
-
-        ${currentTurn >= 0 && cardsRemaining > 0 ? `
-          <div class="exit-deck">
-            <div class="exit-deck-card face-down">
-              <div class="exit-deck-back">
-                <div class="exit-deck-icon">?</div>
-                <div class="exit-deck-label">${cardsRemaining} cards left</div>
+      <div class="exit-layout">
+        <div class="exit-draw-area">
+          ${!hasDrawn && currentTurn >= 0 && cardsRemaining > 0 ? `
+            <div class="exit-card-back" ${isMyTurn ? 'id="draw-exit-btn" role="button" tabindex="0"' : ''}>
+              <div>
+                <div class="exit-card-back-label">&#127922; EXIT</div>
+                <div class="exit-card-back-hint">${isMyTurn ? 'Click to draw' : `${currentTeamName}'s turn`}</div>
               </div>
             </div>
-            ${isMyTurn && !hasDrawn ? `
-              <button class="btn btn-primary btn-large" id="draw-exit-btn">
-                Draw Exit Card
-              </button>
-            ` : ''}
-          </div>
-        ` : ''}
+          ` : ''}
 
-        ${hasDrawn && myTeam?.exitChoice ? `
-          <div class="exit-drawn-result">
-            <h3>Your Exit</h3>
-            <div class="exit-card drawn multiplier-${getMultiplierClass(myTeam.exitChoice.multiplier)}">
-              <div class="exit-type">${myTeam.exitChoice.name}</div>
-              <div class="exit-multiplier">${myTeam.exitChoice.multiplier}x</div>
+          ${hasDrawn && myTeam?.exitChoice ? `
+            <div class="exit-card-revealed" style="border-color: var(--${getMultiplierClass(myTeam.exitChoice.multiplier) === 'high' ? 'green' : getMultiplierClass(myTeam.exitChoice.multiplier) === 'moderate' ? 'amber' : 'red'})">
+              <div class="exit-name">${myTeam.exitChoice.name}</div>
+              <div class="exit-multiplier ${getMultiplierClass(myTeam.exitChoice.multiplier)}">${myTeam.exitChoice.multiplier}x</div>
               <div class="exit-desc">${myTeam.exitChoice.description}</div>
             </div>
-          </div>
-        ` : ''}
-      </div>
+          ` : ''}
 
-      <div class="exit-tracker">
-        <h3>Draw Results</h3>
-        ${state.gameState.teams.map((team, i) => {
-          const hasChosenExit = team.exitChoice !== null;
-          const isCurrentTurn = currentTurn === i;
-          return team.isDisqualified ? '' : `
-            <div class="exit-tracker-item ${hasChosenExit ? 'drawn' : ''} ${isCurrentTurn ? 'current' : ''}">
-              <span class="team-dot" style="background: ${team.color}"></span>
-              <span class="exit-tracker-name">${team.name}</span>
-              ${hasChosenExit && team.exitChoice ? `
-                <span class="exit-tracker-result multiplier-${getMultiplierClass(team.exitChoice.multiplier)}">
-                  ${team.exitChoice.name} (${team.exitChoice.multiplier}x)
-                </span>
-              ` : `
-                <span class="exit-tracker-waiting">${isCurrentTurn ? 'Drawing...' : 'Waiting...'}</span>
-              `}
-            </div>
-          `;
-        }).join('')}
+          <div class="exit-team-draws">
+            ${state.gameState.teams.map((team, i) => {
+              const hasChosenExit = team.exitChoice !== null;
+              const isThisTurn = currentTurn === i;
+              if (team.isDisqualified) return '';
+              return `
+                <div class="exit-team-draw" style="border-color: ${hasChosenExit ? team.color : 'var(--border-default)'}">
+                  <div class="exit-team-draw-name" style="color: ${hasChosenExit ? team.color : 'var(--text-muted)'}">${team.name}</div>
+                  <div class="exit-team-draw-card" ${!hasChosenExit ? 'style="color: var(--text-muted)"' : ''}>
+                    ${hasChosenExit && team.exitChoice ? team.exitChoice.name : isThisTurn ? 'Drawing...' : 'Waiting...'}
+                  </div>
+                  <div class="exit-team-draw-mult" style="color: ${hasChosenExit && team.exitChoice ? (team.exitChoice.multiplier >= 1.5 ? 'var(--green)' : team.exitChoice.multiplier >= 1.0 ? 'var(--amber)' : 'var(--red)') : 'var(--text-muted)'}">
+                    ${hasChosenExit && team.exitChoice ? `${team.exitChoice.multiplier}x` : '?'}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -1161,49 +1451,42 @@ function renderWinner(): string {
     return teamEsop > bestEsop ? team : best;
   });
 
+  const employerEsop = employer.employees.reduce((sum, e) => sum + e.bidAmount, 0);
+
   return `
     <div class="winner-phase">
-      <h2>Game Over!</h2>
+      <div class="winner-layout">
+        <div class="winner-title">Game Over!</div>
 
-      <div class="winners">
-        <div class="winner-card founder">
-          <div class="winner-title">Best Founder</div>
-          <div class="winner-team" style="--team-color: ${founder.color}">
-            ${founder.name}
+        <div class="winner-cards">
+          <div class="winner-card founder">
+            <div class="winner-card-label">Best Founder</div>
+            <div class="winner-card-team" style="color: ${founder.color}">${founder.name}</div>
+            <div class="winner-card-stat">${formatCurrency(founder.valuation)}</div>
+            <div class="winner-card-desc">Highest final valuation</div>
           </div>
-          <div class="winner-stat">${formatCurrency(founder.valuation)}</div>
-          <div class="winner-desc">Highest final valuation</div>
+
+          <div class="winner-card employer">
+            <div class="winner-card-label">Best Employer</div>
+            <div class="winner-card-team" style="color: ${employer.color}">${employer.name}</div>
+            <div class="winner-card-stat">${employerEsop.toFixed(1)}% ESOP</div>
+            <div class="winner-card-desc">Most equity shared with employees</div>
+          </div>
         </div>
 
-        <div class="winner-card employer">
-          <div class="winner-title">Best Employer</div>
-          <div class="winner-team" style="--team-color: ${employer.color}">
-            ${employer.name}
-          </div>
-          <div class="winner-stat">
-            ${employer.employees.reduce((sum, e) => sum + e.bidAmount, 0)}% ESOP
-          </div>
-          <div class="winner-desc">Most ESOP given to employees</div>
-        </div>
-      </div>
-
-      <div class="final-standings">
-        <h3>Final Standings</h3>
-        <div class="standings-list">
+        <div class="standings">
+          <div class="standings-title">Final Standings</div>
           ${teams.map((team, index) => `
-            <div class="standing-item" style="--team-color: ${team.color}">
-              <span class="rank">#${index + 1}</span>
-              <span class="team-name">${team.name}</span>
-              <span class="valuation">${formatCurrency(team.valuation)}</span>
+            <div class="standing-row">
+              <span class="standing-rank">#${index + 1}</span>
+              <span class="standing-dot" style="background: ${team.color}"></span>
+              <span class="standing-name">${team.name}</span>
+              <span class="standing-val">${formatCurrency(team.valuation)}</span>
             </div>
           `).join('')}
         </div>
-      </div>
 
-      <div class="game-over-actions">
-        <button class="btn btn-secondary" id="play-again-btn">
-          Play Again
-        </button>
+        <button class="btn btn-primary btn-lg" id="play-again-btn">Play Again</button>
       </div>
     </div>
   `;
@@ -1446,6 +1729,193 @@ function attachExitListeners(): void {
 // ===========================================
 // Utilities
 // ===========================================
+
+// ===========================================
+// Rules Modal
+// ===========================================
+
+const RULES_SECTIONS = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    content: `
+      <h3>What is ESOP Wars?</h3>
+      <p>5 teams compete to build the highest-valued startup. You'll draft your identity, hire employees by bidding equity (ESOP), survive market rounds, and draw your exit card.</p>
+      <h3>How to Win</h3>
+      <p><strong>Best Founder</strong> — Highest final valuation after exit multiplier.</p>
+      <p><strong>Best Employer</strong> — Most total ESOP shared with employees.</p>
+      <h3>Game Flow</h3>
+      <p>Registration → Setup Drafting → Auction → Seed Round → Early Stage → Secondary Market → Mature Stage → Exit → Winner</p>
+    `,
+  },
+  {
+    id: 'setup',
+    label: 'Setup',
+    content: `
+      <h3>Drafting (3 rounds)</h3>
+      <p>Each team starts with 2 segment cards and 2 idea cards. On your turn: <strong>drop</strong> one card, then <strong>draw</strong> from either deck (or skip).</p>
+      <h3>Lock Selection</h3>
+      <p>After drafting, pick your final segment + idea combo. <strong>Matching pairs</strong> (e.g. a tech segment with a tech idea) unlock a category bonus multiplier during market rounds.</p>
+    `,
+  },
+  {
+    id: 'auction',
+    label: 'Auction',
+    content: `
+      <h3>Bidding</h3>
+      <p>Employee cards are revealed one at a time. Teams bid ESOP equity (starting at 12%) to hire them. Highest bid wins.</p>
+      <h3>Limits</h3>
+      <p>Each team hires up to <strong>3 employees</strong>. Teams with 0 employees are <strong>disqualified</strong>.</p>
+      <h3>Employee Stats</h3>
+      <p><strong>Hard Skill</strong> — Directly impacts valuation each market round.</p>
+      <p><strong>Soft Skills</strong> — Can be boosted or penalized by market card conditions.</p>
+    `,
+  },
+  {
+    id: 'market',
+    label: 'Market',
+    content: `
+      <h3>How It Works</h3>
+      <p>A market card is drawn revealing conditions that affect different employee categories. Your employees' skills determine your valuation change.</p>
+      <h3>Market Leader</h3>
+      <p>The <strong>top 2 gainers</strong> each round receive a bonus valuation bump.</p>
+      <h3>Wildcards</h3>
+      <p>After seeing round results, each team can play their <strong>one-time</strong> wildcard:</p>
+      <p><strong>Double Down</strong> — 2x your gains or losses this round.</p>
+      <p><strong>Shield</strong> — Block any losses this round (gains still apply).</p>
+      <p><strong>Pass</strong> — Save it for a future round.</p>
+    `,
+  },
+  {
+    id: 'secondary',
+    label: 'Secondary',
+    content: `
+      <h3>Drop Phase</h3>
+      <p>Each team must release one employee to the secondary pool.</p>
+      <h3>Hire Phase</h3>
+      <p>Released employees are auctioned off — same bidding rules as the main auction. Last chance to strengthen your team.</p>
+    `,
+  },
+  {
+    id: 'exit',
+    label: 'Exit',
+    content: `
+      <h3>Drawing</h3>
+      <p>Teams take turns drawing from a shuffled exit deck. Your card is <strong>random</strong> — no choosing.</p>
+      <h3>Exit Cards</h3>
+      <p><strong>IPO (2.0x)</strong> — Best outcome. Double your valuation.</p>
+      <p><strong>Acquisition (1.5x)</strong> — Strong exit. 50% boost.</p>
+      <p><strong>Merger (1.0x)</strong> — Neutral. Keep your valuation.</p>
+      <p><strong>Downround (0.75x)</strong> — Rough exit. 25% loss.</p>
+      <p><strong>Fire Sale (0.5x)</strong> — Worst outcome. Half your valuation.</p>
+    `,
+  },
+  {
+    id: 'glossary',
+    label: 'Glossary',
+    content: `
+      <p><strong>ESOP</strong> — Equity you give employees. You start with 12%.</p>
+      <p><strong>Valuation</strong> — Your startup's worth. Highest at exit wins Best Founder.</p>
+      <p><strong>Hard Skill</strong> — Technical ability. Directly affects valuation growth.</p>
+      <p><strong>Soft Skills</strong> — Interpersonal traits. Affected by market conditions.</p>
+      <p><strong>Market Leader</strong> — Top 2 gainers each round get a valuation bonus.</p>
+      <p><strong>Setup Bonus</strong> — Matching segment + idea pairs unlock a category multiplier.</p>
+      <p><strong>Wildcard</strong> — One-time ability: Double Down or Shield.</p>
+      <p><strong>Exit Multiplier</strong> — Applied to your final valuation. IPO (2x) best, Fire Sale (0.5x) worst.</p>
+    `,
+  },
+];
+
+function getPhaseRulesSection(): string {
+  if (!state.gameState) return 'overview';
+  const phase = state.gameState.phase;
+  if (phase === 'setup' || phase === 'setup-lock' || phase === 'setup-summary') return 'setup';
+  if (phase === 'auction' || phase === 'auction-summary') return 'auction';
+  if (phase === 'seed' || phase === 'early' || phase === 'mature') return 'market';
+  if (phase === 'secondary-drop' || phase === 'secondary-hire') return 'secondary';
+  if (phase === 'exit') return 'exit';
+  return 'overview';
+}
+
+function openRulesModal(section?: string): void {
+  const modal = document.getElementById('rules-modal');
+  if (!modal) return;
+
+  const activeSection = section ?? getPhaseRulesSection();
+
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>How to Play</h2>
+        <button class="modal-close" id="close-rules-btn">&times;</button>
+      </div>
+      <div class="rules-nav">
+        ${RULES_SECTIONS.map((s) =>
+          `<span class="rules-nav-item ${s.id === activeSection ? 'active' : ''}" data-section="${s.id}">${s.label}</span>`
+        ).join('')}
+      </div>
+      <div class="modal-body">
+        ${RULES_SECTIONS.map((s) =>
+          `<div class="rules-section ${s.id === activeSection ? 'active' : ''}" data-section="${s.id}">${s.content}</div>`
+        ).join('')}
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  // Close button
+  document.getElementById('close-rules-btn')?.addEventListener('click', closeRulesModal);
+
+  // Backdrop click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeRulesModal();
+  });
+
+  // Nav tabs
+  modal.querySelectorAll('.rules-nav-item').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const sectionId = tab.getAttribute('data-section');
+      if (!sectionId) return;
+      modal.querySelectorAll('.rules-nav-item').forEach((t) => t.classList.remove('active'));
+      modal.querySelectorAll('.rules-section').forEach((s) => s.classList.remove('active'));
+      tab.classList.add('active');
+      modal.querySelector(`.rules-section[data-section="${sectionId}"]`)?.classList.add('active');
+    });
+  });
+}
+
+function openAboutModal(): void {
+  const modal = document.getElementById('rules-modal');
+  if (!modal) return;
+
+  modal.innerHTML = `
+    <div class="modal about-modal">
+      <div class="modal-header">
+        <h2>About</h2>
+        <button class="modal-close" id="close-rules-btn">&times;</button>
+      </div>
+      <div class="modal-body about-body">
+        <div class="about-title">ESOP Wars</div>
+        <div class="about-version">v2.0</div>
+        <p>Idea credit: <strong>Hissa Fund</strong></p>
+        <p>Built by <strong>Pranav Bakre</strong></p>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  document.getElementById('close-rules-btn')?.addEventListener('click', closeRulesModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeRulesModal();
+  });
+}
+
+function closeRulesModal(): void {
+  const modal = document.getElementById('rules-modal');
+  if (modal) modal.style.display = 'none';
+}
 
 export function formatCurrency(value: number): string {
   if (value >= 1_000_000_000) {
