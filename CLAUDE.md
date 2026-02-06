@@ -13,12 +13,14 @@ ESOP Wars is a multiplayer card game where 5 teams compete to build the highest-
 
 ## Documentation
 
-| Document                     | Purpose                                            |
-| ---------------------------- | -------------------------------------------------- |
-| `rules/code_organization.md` | Documentation workflow, feature-map tagging system |
-| `docs/architecture.md`       | v1 code structure, game state shape, phase flow    |
-| `docs/feature-map.md`        | v1 features and functions                          |
-| `docs/ideas/v2-*.md`         | v2 architecture, build phases, decisions           |
+| Document                          | Purpose                                            |
+| --------------------------------- | -------------------------------------------------- |
+| `rules/code_organization.md`      | Documentation workflow, feature-map tagging system |
+| `docs/architecture.md`            | v1 code structure, game state shape, phase flow    |
+| `docs/feature-map.md`             | v1 features and functions                          |
+| `docs/archive/`                   | Implemented feature docs (v2 build, bots, etc.)    |
+| `docs/ideas/v2-ui-facelift.md`    | UI redesign, player guidance, rulebook             |
+| `docs/mockups/ui-facelift.html`   | Interactive HTML mockup for UI facelift            |
 
 ## v2 Source Files (packages/)
 
