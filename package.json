@@ -11,10 +11,13 @@
     "dev:client": "npm run dev -w @esop-wars/client",
     "build": "npm run build --workspaces",
     "deploy": "npm run deploy -w @esop-wars/worker && npm run deploy -w @esop-wars/client",
-    "typecheck": "npm run typecheck --workspaces"
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.18"
   }
 }
