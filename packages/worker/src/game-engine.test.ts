@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { GameConfig, TeamConfig, GameState, EmployeeCard } from '@esop-wars/shared';
+import { describe, it, expect, beforeEach } from 'vitest';
+import type { GameConfig, TeamConfig, GameState } from '@esop-wars/shared';
 import { GAME, TEAM_DEFINITIONS } from '@esop-wars/shared';
 import {
   createInitialState,
@@ -23,7 +23,6 @@ import {
   dropEmployee,
   allEmployeesDropped,
   populateSecondaryPool,
-  closeSecondaryBidding,
   drawExit,
   allExitsChosen,
   applyExitMultipliers,
@@ -33,7 +32,6 @@ import {
   getActiveTeams,
   getWinners,
 } from './game-engine';
-import { employeeCards } from './data';
 
 // ===========================================
 // Test Helpers
