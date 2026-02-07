@@ -506,6 +506,28 @@ input::placeholder, textarea::placeholder {
   font-weight: 500;
 }
 
+.lobby-option {
+  margin-bottom: 16px;
+}
+
+.toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
 .lobby-start-buttons {
   display: flex;
   gap: 10px;

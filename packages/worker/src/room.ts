@@ -149,6 +149,7 @@ export class GameRoom {
         gameState: null,
         spectatorMode: false,
         gameSpeed: 'normal',
+        fillBots: true,
       };
       await this.saveState();
       return new Response('OK');
@@ -251,7 +252,7 @@ export class GameRoom {
         break;
 
       case 'start-game':
-        this.handleStartGame(ws, session);
+        this.handleStartGame(ws, session, msg.fillBots);
         break;
 
       case 'register-team':
@@ -403,7 +404,7 @@ export class GameRoom {
       return;
     }
 
-    if (teamIndex < 0 || teamIndex >= GAME.TEAM_COUNT) {
+    if (teamIndex < 0 || teamIndex >= GAME.MAX_TEAM_COUNT) {
       this.send(ws, { type: 'error', message: 'Invalid team index' });
       return;
     }
@@ -432,7 +433,7 @@ export class GameRoom {
     });
   }
 
-  private handleStartGame(ws: WebSocket, session: SessionData): void {
+  private handleStartGame(ws: WebSocket, session: SessionData, fillBots: boolean): void {
     if (!this.roomState) return;
 
     if (!session.isHost) {
@@ -445,16 +446,67 @@ export class GameRoom {
       return;
     }
 
-    // Build team config - fill empty slots with bots
-    const teamConfigs: TeamConfig[] = TEAM_DEFINITIONS.map((def, index) => {
-      const player = this.roomState!.players.find((p) => p.teamIndex === index);
-      return {
-        name: def.name,
-        color: def.color,
-        playerId: player?.playerId ?? null,
-        isBot: !player,
-      };
-    });
+    this.roomState.fillBots = fillBots;
+
+    let teamConfigs: TeamConfig[];
+
+    if (fillBots) {
+      // Original behavior: all 5 team slots, empty ones filled with bots
+      teamConfigs = TEAM_DEFINITIONS.map((def, index) => {
+        const player = this.roomState!.players.find((p) => p.teamIndex === index);
+        return {
+          name: def.name,
+          color: def.color,
+          playerId: player?.playerId ?? null,
+          isBot: !player,
+        };
+      });
+    } else {
+      // Flexible teams: only include teams that have a human player assigned
+      // Build a mapping from old team index to new (compact) team index
+      const oldToNewIndex = new Map<number, number>();
+      teamConfigs = [];
+
+      for (let i = 0; i < TEAM_DEFINITIONS.length; i++) {
+        const player = this.roomState.players.find((p) => p.teamIndex === i);
+        if (player) {
+          oldToNewIndex.set(i, teamConfigs.length);
+          teamConfigs.push({
+            name: TEAM_DEFINITIONS[i].name,
+            color: TEAM_DEFINITIONS[i].color,
+            playerId: player.playerId,
+            isBot: false,
+          });
+        }
+      }
+
+      // Enforce minimum team count
+      if (teamConfigs.length < GAME.MIN_TEAM_COUNT) {
+        this.send(ws, {
+          type: 'error',
+          message: `Need at least ${GAME.MIN_TEAM_COUNT} players to start without bots`,
+        });
+        return;
+      }
+
+      // Remap player and session team indices to new compact positions
+      for (const player of this.roomState.players) {
+        if (player.teamIndex !== null) {
+          const newIndex = oldToNewIndex.get(player.teamIndex);
+          if (newIndex !== undefined) {
+            player.teamIndex = newIndex;
+          }
+        }
+      }
+      for (const [, sess] of this.sessions) {
+        if (sess.teamIndex !== null) {
+          const newIndex = oldToNewIndex.get(sess.teamIndex);
+          if (newIndex !== undefined) {
+            sess.teamIndex = newIndex;
+          }
+        }
+      }
+    }
 
     // Create initial game state
     this.roomState.gameState = createInitialState({
@@ -470,7 +522,7 @@ export class GameRoom {
       state: this.roomState.gameState,
     });
 
-    // Auto-register bots
+    // Auto-register bots (only relevant when fillBots=true)
     this.autoRegisterBots();
   }
 
@@ -551,7 +603,8 @@ export class GameRoom {
     }
 
     const team = this.roomState.gameState.teams[session.teamIndex];
-    if (team.name !== TEAM_DEFINITIONS[session.teamIndex].name) {
+    const defaultTeamNames = new Set(TEAM_DEFINITIONS.map((d) => d.name));
+    if (!defaultTeamNames.has(team.name)) {
       // Already registered (name changed from default)
       this.send(ws, { type: 'error', message: 'Team already registered' });
       return;
@@ -1151,14 +1204,17 @@ export class GameRoom {
       'Mental health support app for students',
     ];
 
+    let botCounter = 0;
     this.roomState.gameState.teams.forEach((team, index) => {
       if (team.isBot) {
+        const nameIndex = botCounter % botNames.length;
         this.roomState!.gameState = registerTeam(
           this.roomState!.gameState!,
           index,
-          botNames[index],
-          botProblems[index]
+          botNames[nameIndex],
+          botProblems[nameIndex]
         );
+        botCounter++;
 
         this.broadcast({
           type: 'team-updated',

@@ -13,7 +13,7 @@ import type {
   WildcardChoice,
   MarketCard,
 } from '@esop-wars/shared';
-import { GAME } from '@esop-wars/shared';
+import { GAME, TEAM_DEFINITIONS } from '@esop-wars/shared';
 import {
   employeeCards,
   reserveEmployees,
@@ -52,6 +52,60 @@ function isIdeaCard(card: SegmentCard | IdeaCard): card is IdeaCard {
 }
 
 // ===========================================
+// Employee Deck Scaling
+// ===========================================
+
+// Category distribution per team count (proportional selection from 18-card pool)
+// Ensures balanced categories at every team count
+const EMPLOYEE_DISTRIBUTION: Record<number, Record<string, number>> = {
+  2: { Engineering: 2, Product: 2, Sales: 2, Ops: 1, Finance: 1 }, // 8 total
+  3: { Engineering: 3, Product: 3, Sales: 2, Ops: 2, Finance: 2 }, // 12 total
+  4: { Engineering: 4, Product: 4, Sales: 3, Ops: 3, Finance: 2 }, // 16 total
+};
+
+function buildEmployeeDeck(teamCount: number): EmployeeCard[] {
+  // At 5 teams, use the full 18-card deck
+  if (teamCount >= 5) {
+    return shuffleArray([...employeeCards]);
+  }
+
+  const distribution = EMPLOYEE_DISTRIBUTION[teamCount];
+  if (!distribution) {
+    return shuffleArray([...employeeCards]);
+  }
+
+  // Group cards by category
+  const byCategory: Record<string, EmployeeCard[]> = {};
+  for (const card of employeeCards) {
+    const cat = card.category;
+    if (!byCategory[cat]) {
+      byCategory[cat] = [];
+    }
+    byCategory[cat].push(card);
+  }
+
+  // Select proportionally from each category
+  const selected: EmployeeCard[] = [];
+  for (const [category, count] of Object.entries(distribution)) {
+    const available = byCategory[category];
+    if (available) {
+      const shuffled = shuffleArray(available);
+      selected.push(...shuffled.slice(0, count));
+    }
+  }
+
+  return shuffleArray(selected);
+}
+
+// ===========================================
+// Market Leader Count Scaling
+// ===========================================
+
+function getMarketLeaderCount(teamCount: number): number {
+  return Math.max(1, Math.floor(teamCount / 2));
+}
+
+// ===========================================
 // State Creation
 // ===========================================
 
@@ -85,8 +139,8 @@ export function createInitialState(config: GameConfig): GameState {
     preExitValuation: 0,
   }));
 
-  // Shuffle decks
-  const shuffledEmployees = shuffleArray(employeeCards);
+  // Build scaled employee deck based on team count
+  const scaledEmployeeDeck = buildEmployeeDeck(config.teams.length);
   const shuffledMarket = shuffleArray(marketCards);
   const shuffledSegments = shuffleArray(segmentCards);
   const shuffledIdeas = shuffleArray([...productCards, ...serviceCards]);
@@ -96,7 +150,7 @@ export function createInitialState(config: GameConfig): GameState {
     teams,
     currentTurn: 0,
 
-    employeeDeck: shuffledEmployees,
+    employeeDeck: scaledEmployeeDeck,
     marketDeck: shuffledMarket,
     segmentDeck: shuffledSegments,
     ideaDeck: shuffledIdeas,
@@ -147,12 +201,11 @@ export function registerTeam(
 
 export function isPhaseComplete(state: GameState): boolean {
   switch (state.phase) {
-    case 'registration':
+    case 'registration': {
       // All teams must have non-default names (registered)
-      return state.teams.every((t, i) => {
-        const defaultName = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Omega'][i];
-        return t.name !== defaultName;
-      });
+      const defaultNames = new Set(TEAM_DEFINITIONS.map((d) => d.name));
+      return state.teams.every((t) => !defaultNames.has(t.name));
+    }
 
     case 'setup':
       return state.setupRound >= GAME.SETUP_ROUNDS;
@@ -471,8 +524,12 @@ export function skipCard(state: GameState): GameState {
   newState.currentCardIndex++;
   newState.currentBid = null;
 
-  // Check if auction is complete
-  if (newState.currentCardIndex >= newState.employeeDeck.length) {
+  // Check if auction is complete (all teams full OR no cards left)
+  const allComplete = newState.teams.every(
+    (t) => t.employees.length >= GAME.EMPLOYEES_PER_TEAM
+  );
+
+  if (allComplete || newState.currentCardIndex >= newState.employeeDeck.length) {
     // Apply $1M penalty per missing employee (V1 behavior - no disqualification)
     newState.teams.forEach((team) => {
       const missingEmployees = GAME.EMPLOYEES_PER_TEAM - team.employees.length;
@@ -726,9 +783,10 @@ export function applyMarketLeaderBonus(state: GameState): GameState {
       return b.team.valuation - a.team.valuation;
     });
 
-  // Top 2 get market leader status and bonus
+  // Top N get market leader status and bonus (scales with team count)
+  const leaderCount = getMarketLeaderCount(newState.teams.length);
   const leaderBonus = 0.20; // 20% bonus
-  activeTeams.slice(0, 2).forEach(({ team }) => {
+  activeTeams.slice(0, leaderCount).forEach(({ team }) => {
     team.isMarketLeader = true;
     team.marketLeaderCount++;
     team.valuation = Math.round(team.valuation * (1 + leaderBonus));
@@ -796,6 +854,10 @@ export function dropEmployee(
 
   // Remove from team and add to dropped list
   const [employee] = team.employees.splice(empIndex, 1);
+
+  // Refund 50% of the original bid ESOP
+  const refund = Math.round(employee.bidAmount * 0.5 * 100) / 100;
+  team.esopRemaining += refund;
 
   // Convert back to base EmployeeCard (remove bidAmount)
   const baseEmployee: EmployeeCard = {

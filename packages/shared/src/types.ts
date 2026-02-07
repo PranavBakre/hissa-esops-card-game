@@ -44,6 +44,7 @@ export interface RoomState {
   gameState: GameState | null;
   spectatorMode: boolean;
   gameSpeed: GameSpeed;
+  fillBots: boolean;
 }
 
 export interface PlayerSession {
@@ -252,7 +253,7 @@ export type ClientMessage =
   | { type: 'join'; playerName: string }
   | { type: 'reconnect'; playerId: string }
   | { type: 'select-team'; teamIndex: number }
-  | { type: 'start-game' }
+  | { type: 'start-game'; fillBots: boolean }
   | { type: 'start-bot-game' }
   | { type: 'set-game-speed'; speed: GameSpeed }
   | { type: 'register-team'; name: string; problemStatement: string }
@@ -323,5 +324,6 @@ export interface GameConfig {
 // Default values
 export const DEFAULT_INITIAL_VALUATION = 20_000_000;
 export const DEFAULT_INITIAL_ESOP = 12;
-export const TEAM_COUNT = 5;
+export const MAX_TEAM_COUNT = 5;
+export const MIN_TEAM_COUNT = 2;
 export const EMPLOYEES_PER_TEAM = 3;
