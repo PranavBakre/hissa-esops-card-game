@@ -3,7 +3,7 @@
 // ===========================================
 
 import type { Phase } from '@esop-wars/shared';
-import { TEAM_DEFINITIONS, PHASE_LABELS } from '@esop-wars/shared';
+import { TEAM_DEFINITIONS, PHASE_LABELS, GAME } from '@esop-wars/shared';
 import {
   state,
   createRoom,
@@ -1458,14 +1458,17 @@ function renderWinner(): string {
   // Best Founder: Highest valuation
   const founder = teams[0];
 
-  // Best Employer: Most ESOP given
+  // Best Employer: Highest (ESOP% given to employees) x valuation
   const employer = teams.reduce((best, team) => {
     const teamEsop = team.employees.reduce((sum, e) => sum + e.bidAmount, 0);
     const bestEsop = best.employees.reduce((sum, e) => sum + e.bidAmount, 0);
-    return teamEsop > bestEsop ? team : best;
+    const teamScore = (teamEsop / GAME.INITIAL_ESOP) * team.valuation;
+    const bestScore = (bestEsop / GAME.INITIAL_ESOP) * best.valuation;
+    return teamScore > bestScore ? team : best;
   });
 
   const employerEsop = employer.employees.reduce((sum, e) => sum + e.bidAmount, 0);
+  const employerScore = (employerEsop / GAME.INITIAL_ESOP) * employer.valuation;
 
   return `
     <div class="winner-phase">
@@ -1483,8 +1486,8 @@ function renderWinner(): string {
           <div class="winner-card employer">
             <div class="winner-card-label">Best Employer</div>
             <div class="winner-card-team" style="color: ${employer.color}">${employer.name}</div>
-            <div class="winner-card-stat">${employerEsop.toFixed(1)}% ESOP</div>
-            <div class="winner-card-desc">Most equity shared with employees</div>
+            <div class="winner-card-stat">${formatCurrency(employerScore)}</div>
+            <div class="winner-card-desc">${employerEsop} ESOP given, ${formatCurrency(employer.valuation)} valuation</div>
           </div>
         </div>
 
@@ -1761,7 +1764,7 @@ const RULES_SECTIONS = [
       <p>5 teams compete to build the highest-valued startup. You'll draft your identity, hire employees by bidding equity (ESOP), survive market rounds, and draw your exit card.</p>
       <h3>How to Win</h3>
       <p><strong>Best Founder</strong> — Highest final valuation after exit multiplier.</p>
-      <p><strong>Best Employer</strong> — Most total ESOP shared with employees.</p>
+      <p><strong>Best Employer</strong> — Highest ESOP% given to employees multiplied by valuation.</p>
       <h3>Game Flow</h3>
       <p>Registration → Setup Drafting → Auction → Seed Round → Early Stage → Secondary Market → Mature Stage → Exit → Winner</p>
     `,

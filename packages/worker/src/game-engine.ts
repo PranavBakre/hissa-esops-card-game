@@ -592,11 +592,13 @@ export function getWinners(state: GameState): { founder: Team; employer: Team; s
     team.valuation > best.valuation ? team : best
   );
 
-  // Best Employer: Highest total ESOP given to employees
+  // Best Employer: Highest (ESOP% given to employees) x valuation
   const employer = activeTeams.reduce((best, team) => {
-    const teamValue = team.employees.reduce((sum, e) => sum + e.bidAmount, 0);
-    const bestValue = best.employees.reduce((sum, e) => sum + e.bidAmount, 0);
-    return teamValue > bestValue ? team : best;
+    const teamEsop = team.employees.reduce((sum, e) => sum + e.bidAmount, 0);
+    const bestEsop = best.employees.reduce((sum, e) => sum + e.bidAmount, 0);
+    const teamScore = (teamEsop / GAME.INITIAL_ESOP) * team.valuation;
+    const bestScore = (bestEsop / GAME.INITIAL_ESOP) * best.valuation;
+    return teamScore > bestScore ? team : best;
   });
 
   return {

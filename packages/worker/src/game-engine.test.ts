@@ -827,13 +827,15 @@ describe('query functions', () => {
   it('getWinners returns founder and employer', () => {
     let state = createTestState(2);
     state.phase = 'winner';
+    // Team 0: 30M valuation, 2 ESOP spent -> (2/12)*30M = 5M employer score
     state.teams[0].valuation = 30_000_000;
     state.teams[0].employees = [
-      { id: 1, name: 'A', role: 'A', category: 'Engineering', hardSkill: 0.5, softSkills: {}, bidAmount: 5 },
+      { id: 1, name: 'A', role: 'A', category: 'Engineering', hardSkill: 0.5, softSkills: {}, bidAmount: 2 },
     ];
+    // Team 1: 20M valuation, 10 ESOP spent -> (10/12)*20M = 16.7M employer score (best employer)
     state.teams[1].valuation = 20_000_000;
     state.teams[1].employees = [
-      { id: 2, name: 'B', role: 'B', category: 'Sales', hardSkill: 0.5, softSkills: {}, bidAmount: 8 },
+      { id: 2, name: 'B', role: 'B', category: 'Sales', hardSkill: 0.5, softSkills: {}, bidAmount: 10 },
     ];
 
     const winners = getWinners(state);
