@@ -481,8 +481,8 @@ export function setGameSpeed(speed: GameSpeed): void {
   render();
 }
 
-export function registerTeam(name: string, problemStatement: string): void {
-  send({ type: 'register-team', name, problemStatement });
+export function registerTeam(name: string): void {
+  send({ type: 'register-team', name });
 }
 
 export function leaveRoom(): void {

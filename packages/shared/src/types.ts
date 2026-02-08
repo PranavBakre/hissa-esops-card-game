@@ -125,7 +125,6 @@ export interface DroppedEmployee {
 export interface Team {
   name: string;
   color: string;
-  problemStatement: string;
   esopRemaining: number;
   valuation: number;
   employees: HiredEmployee[];
@@ -256,7 +255,7 @@ export type ClientMessage =
   | { type: 'start-game'; fillBots: boolean }
   | { type: 'start-bot-game' }
   | { type: 'set-game-speed'; speed: GameSpeed }
-  | { type: 'register-team'; name: string; problemStatement: string }
+  | { type: 'register-team'; name: string }
   | { type: 'drop-card'; cardId: number; isSegment: boolean }
   | { type: 'draw-card'; deckType: 'segment' | 'idea' }
   | { type: 'skip-draw' }

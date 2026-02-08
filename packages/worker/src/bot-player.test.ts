@@ -85,10 +85,9 @@ describe('getBotDelay', () => {
 // ===========================================
 
 describe('decideRegistration', () => {
-  it('returns a name and problem statement', () => {
+  it('returns a name', () => {
     const decision = decideRegistration(0, []);
     expect(decision.name).toBeTruthy();
-    expect(decision.problemStatement).toBeTruthy();
   });
 
   it('avoids already used names', () => {
@@ -107,7 +106,7 @@ describe('decideSetupDrop', () => {
     let state = createTestState(3);
     // Register and advance to setup
     for (let i = 0; i < 3; i++) {
-      state = registerTeam(state, i, `Bot ${i}`, `Problem ${i}`);
+      state = registerTeam(state, i, `Bot ${i}`);
     }
     state = advancePhase(state); // -> setup
 

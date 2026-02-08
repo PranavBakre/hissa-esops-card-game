@@ -18,8 +18,7 @@ import { GAME } from '@esop-wars/shared';
 export function validateRegister(
   state: GameState,
   teamIndex: number,
-  name: string,
-  problemStatement: string
+  name: string
 ): ValidationResult {
   if (state.phase !== 'registration') {
     return { valid: false, error: 'Not in registration phase' };
@@ -35,14 +34,6 @@ export function validateRegister(
 
   if (name.length > 30) {
     return { valid: false, error: 'Name must be 30 characters or less' };
-  }
-
-  if (!problemStatement || problemStatement.trim().length === 0) {
-    return { valid: false, error: 'Problem statement is required' };
-  }
-
-  if (problemStatement.length > 100) {
-    return { valid: false, error: 'Problem statement must be 100 characters or less' };
   }
 
   return { valid: true };

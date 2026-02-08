@@ -113,7 +113,6 @@ export function createInitialState(config: GameConfig): GameState {
   const teams: Team[] = config.teams.map((tc) => ({
     name: tc.name,
     color: tc.color,
-    problemStatement: '',
     esopRemaining: config.initialEsop,
     valuation: config.initialValuation,
     employees: [],
@@ -186,12 +185,10 @@ export function createInitialState(config: GameConfig): GameState {
 export function registerTeam(
   state: GameState,
   teamIndex: number,
-  name: string,
-  problemStatement: string
+  name: string
 ): GameState {
   const newState = deepClone(state);
   newState.teams[teamIndex].name = name;
-  newState.teams[teamIndex].problemStatement = problemStatement;
   return newState;
 }
 

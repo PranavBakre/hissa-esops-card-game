@@ -63,7 +63,7 @@ function createTestState(teamCount: number = 5): GameState {
 function registerAllTeams(state: GameState): GameState {
   let s = state;
   s.teams.forEach((_, i) => {
-    s = registerTeam(s, i, `Startup ${i}`, `Problem ${i}`);
+    s = registerTeam(s, i, `Startup ${i}`);
   });
   return s;
 }
@@ -192,11 +192,10 @@ describe('createInitialState', () => {
 // ===========================================
 
 describe('registration', () => {
-  it('registerTeam updates name and problem statement', () => {
+  it('registerTeam updates name', () => {
     const state = createTestState(3);
-    const updated = registerTeam(state, 0, 'My Startup', 'Solve world hunger');
+    const updated = registerTeam(state, 0, 'My Startup');
     expect(updated.teams[0].name).toBe('My Startup');
-    expect(updated.teams[0].problemStatement).toBe('Solve world hunger');
   });
 
   it('isPhaseComplete returns false when teams have default names', () => {
@@ -206,8 +205,8 @@ describe('registration', () => {
 
   it('isPhaseComplete returns false when some teams still have default names', () => {
     let state = createTestState(3);
-    state = registerTeam(state, 0, 'My Startup', 'Problem');
-    state = registerTeam(state, 1, 'Other Startup', 'Problem');
+    state = registerTeam(state, 0, 'My Startup');
+    state = registerTeam(state, 1, 'Other Startup');
     // Team 2 still has default name "Gamma"
     expect(isPhaseComplete(state)).toBe(false);
   });

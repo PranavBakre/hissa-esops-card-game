@@ -40,7 +40,7 @@ const PHASE_INTRO_TEXT: Partial<Record<Phase, { icon: string; title: string; des
   registration: {
     icon: '&#128221;',
     title: 'Registration',
-    desc: 'Name your startup and describe the problem you\'re solving.',
+    desc: 'Name your startup to get started.',
   },
   setup: {
     icon: '&#127183;',
@@ -102,18 +102,9 @@ function isInputElement(el: EventTarget | Element | null): el is HTMLInputElemen
   return el instanceof HTMLInputElement;
 }
 
-function isTextAreaElement(el: EventTarget | Element | null): el is HTMLTextAreaElement {
-  return el instanceof HTMLTextAreaElement;
-}
-
 function getInputById(id: string): HTMLInputElement | null {
   const el = document.getElementById(id);
   return isInputElement(el) ? el : null;
-}
-
-function getTextAreaById(id: string): HTMLTextAreaElement | null {
-  const el = document.getElementById(id);
-  return isTextAreaElement(el) ? el : null;
 }
 
 // ===========================================
@@ -720,7 +711,7 @@ function renderRegistration(): string {
   return `
     <div class="registration-phase">
       <h2>Registration</h2>
-      <p class="action-hint">Name your startup and describe the problem you're solving.</p>
+      <p class="action-hint">Name your startup to get started.</p>
 
       ${myTeam && !isRegistered ? `
         <form class="registration-form" id="registration-form">
@@ -734,23 +725,12 @@ function renderRegistration(): string {
               required
             />
           </div>
-          <div class="form-group">
-            <label for="problem-statement">Problem Statement</label>
-            <textarea
-              id="problem-statement"
-              placeholder="What problem are you solving?"
-              maxlength="100"
-              rows="3"
-              required
-            ></textarea>
-          </div>
           <button type="submit" class="btn btn-primary">Register</button>
         </form>
       ` : myTeam ? `
         <div class="registration-complete">
           <h3>Registered!</h3>
           <p><strong>${myTeam.name}</strong></p>
-          <p>${myTeam.problemStatement}</p>
         </div>
       ` : `
         <p>You are spectating this game.</p>
@@ -936,7 +916,6 @@ function renderSetupSummary(): string {
         ${state.gameState.teams.map((team) => `
           <div class="team-summary" style="--team-color: ${team.color}">
             <div class="team-header">${team.name}</div>
-            <div class="team-problem">${team.problemStatement}</div>
             <div class="team-setup">
               <div class="segment-badge">${team.lockedSegment?.name ?? 'None'}</div>
               <div class="idea-badge">${team.lockedIdea?.name ?? 'None'}</div>
@@ -1588,10 +1567,9 @@ function attachRegistrationListeners(): void {
   form?.addEventListener('submit', (e) => {
     e.preventDefault();
     const nameInput = getInputById('team-name');
-    const problemInput = getTextAreaById('problem-statement');
 
-    if (nameInput && problemInput && nameInput.value.trim() && problemInput.value.trim()) {
-      registerTeam(nameInput.value.trim(), problemInput.value.trim());
+    if (nameInput && nameInput.value.trim()) {
+      registerTeam(nameInput.value.trim());
     }
   });
 }

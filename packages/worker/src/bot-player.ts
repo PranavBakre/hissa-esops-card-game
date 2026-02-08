@@ -45,22 +45,8 @@ const BOT_NAMES = [
   'Prime Dragon Studio',
 ];
 
-const BOT_PROBLEMS = [
-  'AI-powered meal planning for busy families',
-  'Blockchain-based credential verification',
-  'Sustainable packaging marketplace for SMBs',
-  'Remote team culture building platform',
-  'Mental health support app for students',
-  'Hyperlocal delivery network for pharmacies',
-  'Carbon footprint tracking for e-commerce',
-  'Micro-learning platform for blue-collar workers',
-  'Peer-to-peer equipment rental for construction',
-  'Smart inventory management for retail',
-];
-
 export interface RegistrationDecision {
   name: string;
-  problemStatement: string;
 }
 
 export function decideRegistration(teamIndex: number, usedNames: string[]): RegistrationDecision {
@@ -72,9 +58,7 @@ export function decideRegistration(teamIndex: number, usedNames: string[]): Regi
     name = BOT_NAMES[(teamIndex + attempt) % BOT_NAMES.length];
   }
 
-  const problemStatement = BOT_PROBLEMS[Math.floor(Math.random() * BOT_PROBLEMS.length)];
-
-  return { name, problemStatement };
+  return { name };
 }
 
 // ===========================================

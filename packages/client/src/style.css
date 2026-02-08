@@ -1404,14 +1404,6 @@ input::placeholder, textarea::placeholder {
   margin-bottom: 8px;
 }
 
-.team-summary .team-problem {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-  font-style: italic;
-  line-height: 1.5;
-}
-
 .team-summary .team-setup {
   display: flex;
   gap: 8px;

@@ -54,39 +54,29 @@ describe('validateRegister', () => {
   it('rejects when not in registration phase', () => {
     const state = createTestState();
     state.phase = 'auction';
-    expect(validateRegister(state, 0, 'Test', 'Problem').valid).toBe(false);
+    expect(validateRegister(state, 0, 'Test').valid).toBe(false);
   });
 
   it('rejects invalid team index', () => {
     const state = createTestState();
-    expect(validateRegister(state, -1, 'Test', 'Problem').valid).toBe(false);
-    expect(validateRegister(state, 10, 'Test', 'Problem').valid).toBe(false);
+    expect(validateRegister(state, -1, 'Test').valid).toBe(false);
+    expect(validateRegister(state, 10, 'Test').valid).toBe(false);
   });
 
   it('rejects empty name', () => {
     const state = createTestState();
-    expect(validateRegister(state, 0, '', 'Problem').valid).toBe(false);
-    expect(validateRegister(state, 0, '  ', 'Problem').valid).toBe(false);
+    expect(validateRegister(state, 0, '').valid).toBe(false);
+    expect(validateRegister(state, 0, '  ').valid).toBe(false);
   });
 
   it('rejects name over 30 chars', () => {
     const state = createTestState();
-    expect(validateRegister(state, 0, 'A'.repeat(31), 'Problem').valid).toBe(false);
-  });
-
-  it('rejects empty problem statement', () => {
-    const state = createTestState();
-    expect(validateRegister(state, 0, 'Test', '').valid).toBe(false);
-  });
-
-  it('rejects problem over 100 chars', () => {
-    const state = createTestState();
-    expect(validateRegister(state, 0, 'Test', 'A'.repeat(101)).valid).toBe(false);
+    expect(validateRegister(state, 0, 'A'.repeat(31)).valid).toBe(false);
   });
 
   it('accepts valid registration', () => {
     const state = createTestState();
-    expect(validateRegister(state, 0, 'My Startup', 'Solving problems').valid).toBe(true);
+    expect(validateRegister(state, 0, 'My Startup').valid).toBe(true);
   });
 });
 

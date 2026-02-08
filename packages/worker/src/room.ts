@@ -256,7 +256,7 @@ export class GameRoom {
         break;
 
       case 'register-team':
-        this.handleRegisterTeam(ws, session, msg.name, msg.problemStatement);
+        this.handleRegisterTeam(ws, session, msg.name);
         break;
 
       case 'drop-card':
@@ -587,8 +587,7 @@ export class GameRoom {
   private handleRegisterTeam(
     ws: WebSocket,
     session: SessionData,
-    name: string,
-    problemStatement: string
+    name: string
   ): void {
     if (!this.roomState?.gameState) return;
 
@@ -614,8 +613,7 @@ export class GameRoom {
     this.roomState.gameState = registerTeam(
       this.roomState.gameState,
       session.teamIndex,
-      name,
-      problemStatement
+      name
     );
 
     // Broadcast update
@@ -1197,14 +1195,6 @@ export class GameRoom {
       'Stellar Falcon Ventures',
     ];
 
-    const botProblems = [
-      'AI-powered meal planning for busy families',
-      'Blockchain-based credential verification',
-      'Sustainable packaging marketplace for SMBs',
-      'Remote team culture building platform',
-      'Mental health support app for students',
-    ];
-
     let botCounter = 0;
     this.roomState.gameState.teams.forEach((team, index) => {
       if (team.isBot) {
@@ -1212,8 +1202,7 @@ export class GameRoom {
         this.roomState!.gameState = registerTeam(
           this.roomState!.gameState!,
           index,
-          botNames[nameIndex],
-          botProblems[nameIndex]
+          botNames[nameIndex]
         );
         botCounter++;
 
