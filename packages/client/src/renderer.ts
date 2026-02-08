@@ -26,6 +26,7 @@ import {
   drawMarket,
   dropEmployeeAction,
   drawExit,
+  toggleFillBots,
 } from './app';
 
 // ===========================================
@@ -225,15 +226,21 @@ function renderHome(app: HTMLElement): void {
 function renderLobby(app: HTMLElement): void {
   if (!state.room) return;
 
+  const playersWithTeams = state.room.players.filter((p) => p.teamIndex !== null);
+  const humanTeamCount = playersWithTeams.length;
+
   const teamSlots = TEAM_DEFINITIONS.map((def, index) => {
     const player = state.room?.players.find((p) => p.teamIndex === index);
     const isMyTeam = state.myTeamIndex === index;
     const isTaken = !!player && player.playerId !== state.playerId;
 
     const statusClass = isMyTeam ? 'you' : '';
-    const statusText = player
-      ? (player.playerId === state.playerId ? 'You' : player.playerName)
-      : 'Empty';
+    let statusText = 'Empty';
+    if (player) {
+      statusText = player.playerId === state.playerId ? 'You' : player.playerName;
+    } else if (!state.fillBots) {
+      statusText = 'Not playing';
+    }
 
     return `
       <div
@@ -256,6 +263,20 @@ function renderLobby(app: HTMLElement): void {
       </div>
     `)
     .join('');
+
+  const canStart = state.fillBots
+    ? humanTeamCount > 0
+    : humanTeamCount >= 2;
+
+  const startButtonLabel = state.fillBots
+    ? 'Start Game'
+    : `Start Game (${humanTeamCount} players)`;
+
+  const lobbyHint = state.fillBots
+    ? 'Empty team slots will be filled with bots'
+    : humanTeamCount < 2
+      ? 'Need at least 2 players to start without bots'
+      : `${humanTeamCount} of 5 teams ready`;
 
   app.innerHTML = `
     <div class="lobby-screen">
@@ -280,19 +301,25 @@ function renderLobby(app: HTMLElement): void {
 
       <div class="lobby-footer">
         ${state.isHost ? `
+          <div class="lobby-option">
+            <label class="toggle-label" id="fill-bots-toggle">
+              <input type="checkbox" ${state.fillBots ? 'checked' : ''} />
+              <span>Fill empty slots with bots</span>
+            </label>
+          </div>
           <div class="lobby-start-buttons">
             <button
               class="btn btn-primary btn-lg"
               id="start-game-btn"
-              ${state.room.players.some((p) => p.teamIndex !== null) ? '' : 'disabled'}
+              ${canStart ? '' : 'disabled'}
             >
-              Start Game
+              ${startButtonLabel}
             </button>
             <button class="btn btn-secondary btn-lg" id="start-bot-game-btn">
-              Start Bot Game
+              Watch Bot Game
             </button>
           </div>
-          <div class="lobby-hint">Empty team slots will be filled with bots</div>
+          <div class="lobby-hint">${lobbyHint}</div>
         ` : `
           <div class="lobby-hint">Waiting for host to start the game...</div>
         `}
@@ -312,6 +339,11 @@ function renderLobby(app: HTMLElement): void {
 
   document.getElementById('start-game-btn')?.addEventListener('click', startGame);
   document.getElementById('start-bot-game-btn')?.addEventListener('click', startBotGame);
+
+  const fillBotsCheckbox = document.querySelector('#fill-bots-toggle input');
+  if (fillBotsCheckbox) {
+    fillBotsCheckbox.addEventListener('change', toggleFillBots);
+  }
 }
 
 // ===========================================
@@ -1157,24 +1189,24 @@ function renderMarketRound(): string {
         <div class="wildcard-phase">
           <h3>Wildcard Decision</h3>
           <p class="wildcard-context">Now that you've seen the market results, choose your wildcard strategy:</p>
-          ${myTeam && !hasSelectedWildcard ? `
+          ${myTeam && !hasSelectedWildcard && !myTeam.wildcardUsed ? `
             <div class="wildcard-options">
-              ${!myTeam.wildcardUsed ? `
-                <div class="wildcard-option" data-choice="double-down">
-                  <div class="wildcard-name">Double Down</div>
-                  <div class="wildcard-desc">Double your gains or losses this round</div>
-                </div>
-                <div class="wildcard-option" data-choice="shield">
-                  <div class="wildcard-name">Shield</div>
-                  <div class="wildcard-desc">Revert any losses this round</div>
-                </div>
-              ` : `
-                <p class="wildcard-used-note">You've already used your wildcard in a previous round.</p>
-              `}
+              <div class="wildcard-option" data-choice="double-down">
+                <div class="wildcard-name">Double Down</div>
+                <div class="wildcard-desc">Double your gains or losses this round</div>
+              </div>
+              <div class="wildcard-option" data-choice="shield">
+                <div class="wildcard-name">Shield</div>
+                <div class="wildcard-desc">Revert any losses this round</div>
+              </div>
               <div class="wildcard-option pass" data-choice="pass">
                 <div class="wildcard-name">Pass</div>
                 <div class="wildcard-desc">Save wildcard for later</div>
               </div>
+            </div>
+          ` : myTeam && !hasSelectedWildcard && myTeam.wildcardUsed ? `
+            <div class="wildcard-waiting" id="auto-pass-wildcard">
+              <p>Wildcard already used. Auto-passing...</p>
             </div>
           ` : myTeam ? `
             <div class="wildcard-waiting">
@@ -1285,7 +1317,10 @@ function renderSecondaryHire(): string {
     `;
   }
 
-  const canBid = myTeam && !myTeam.isDisqualified && myTeam.esopRemaining > 0;
+  const canBid = myTeam &&
+    !myTeam.isDisqualified &&
+    myTeam.employees.length < 3 &&
+    myTeam.esopRemaining > 0;
   const minBid = currentBid ? currentBid.amount + 1 : 1;
 
   const hardPct = (currentCard.hardSkill * 100).toFixed(0);
@@ -1684,6 +1719,11 @@ function attachWildcardListeners(): void {
       }
     });
   });
+
+  // Auto-pass if wildcard already used
+  if (document.getElementById('auto-pass-wildcard')) {
+    selectWildcard('pass');
+  }
 }
 
 function attachMarketListeners(): void {

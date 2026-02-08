@@ -54,6 +54,7 @@ export interface ClientState {
   spectatorMode: boolean;
   gameSpeed: GameSpeed;
   pendingBotGame: boolean;
+  fillBots: boolean;
 }
 
 export const state: ClientState = {
@@ -70,6 +71,7 @@ export const state: ClientState = {
   spectatorMode: false,
   gameSpeed: 'normal',
   pendingBotGame: false,
+  fillBots: true,
 };
 
 // ===========================================
@@ -460,7 +462,12 @@ export function selectTeam(teamIndex: number): void {
 }
 
 export function startGame(): void {
-  send({ type: 'start-game' });
+  send({ type: 'start-game', fillBots: state.fillBots });
+}
+
+export function toggleFillBots(): void {
+  state.fillBots = !state.fillBots;
+  render();
 }
 
 export function startBotGame(): void {

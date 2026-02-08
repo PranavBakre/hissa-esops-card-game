@@ -123,7 +123,8 @@ export const SPEED_MULTIPLIERS: Record<GameSpeed, number> = {
 // ===========================================
 
 export const GAME = {
-  TEAM_COUNT: 5,
+  MAX_TEAM_COUNT: 5,
+  MIN_TEAM_COUNT: 2,
   EMPLOYEES_PER_TEAM: 3,
   INITIAL_VALUATION: 20_000_000,
   INITIAL_ESOP: 12,
