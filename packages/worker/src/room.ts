@@ -1187,6 +1187,7 @@ export class GameRoom {
 
   private autoRegisterBots(): void {
     if (!this.roomState?.gameState) return;
+    if (!this.roomState.fillBots) return;
 
     const botNames = [
       'Quantum Phoenix Labs',

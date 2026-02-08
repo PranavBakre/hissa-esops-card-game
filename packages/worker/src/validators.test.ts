@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { GameState, HiredEmployee } from '@esop-wars/shared';
+import type { GameState, HiredEmployee, EmployeeCategory } from '@esop-wars/shared';
 import { GAME, TEAM_DEFINITIONS } from '@esop-wars/shared';
 import {
   validateRegister,
@@ -34,12 +34,12 @@ function createTestState(teamCount: number = 3): GameState {
   });
 }
 
-function makeEmployee(id: number, category: string = 'Engineering'): HiredEmployee {
+function makeEmployee(id: number, category: EmployeeCategory = 'Engineering'): HiredEmployee {
   return {
     id,
     name: `Emp ${id}`,
     role: 'Role',
-    category: category as HiredEmployee['category'],
+    category,
     hardSkill: 0.5,
     softSkills: {},
     bidAmount: 2,

@@ -855,8 +855,8 @@ export function dropEmployee(
   // Remove from team and add to dropped list
   const [employee] = team.employees.splice(empIndex, 1);
 
-  // Refund 50% of the original bid ESOP
-  const refund = Math.round(employee.bidAmount * 0.5 * 100) / 100;
+  // Refund 50% of the original bid ESOP (floor to keep ESOP as whole numbers)
+  const refund = Math.floor(employee.bidAmount * 0.5);
   team.esopRemaining += refund;
 
   // Convert back to base EmployeeCard (remove bidAmount)

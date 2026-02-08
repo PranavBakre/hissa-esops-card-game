@@ -441,21 +441,22 @@ describe('auction', () => {
   });
 
   it('applies Ops ESOP discount after first ops hire', () => {
-    const mockTeam = {
-      employees: [{ category: 'Ops' }],
-    };
-    // @ts-expect-error - partial team for testing
-    expect(getOpsDiscount(mockTeam)).toBe(0.1);
-    // @ts-expect-error - partial team for testing
-    expect(getEffectiveEsopCost(mockTeam, 2)).toBeCloseTo(1.8);
+    const s = createTestState(2);
+    s.teams[0].employees = [{
+      id: 1, name: 'Ops Lead', role: 'Ops', category: 'Ops',
+      hardSkill: 0.5, softSkills: {}, bidAmount: 2,
+    }];
+    expect(getOpsDiscount(s.teams[0])).toBe(0.1);
+    expect(getEffectiveEsopCost(s.teams[0], 2)).toBeCloseTo(1.8);
   });
 
   it('no Ops discount without Ops hire', () => {
-    const mockTeam = {
-      employees: [{ category: 'Engineering' }],
-    };
-    // @ts-expect-error - partial team for testing
-    expect(getOpsDiscount(mockTeam)).toBe(0);
+    const s = createTestState(2);
+    s.teams[0].employees = [{
+      id: 1, name: 'Dev', role: 'Dev', category: 'Engineering',
+      hardSkill: 0.5, softSkills: {}, bidAmount: 2,
+    }];
+    expect(getOpsDiscount(s.teams[0])).toBe(0);
   });
 });
 
@@ -675,6 +676,18 @@ describe('secondary market', () => {
     }];
     state = dropEmployee(state, 0, 1);
     expect(state.teams[0].esopRemaining).toBe(10); // 8 + 50% of 4
+  });
+
+  it('dropEmployee refund floors on odd bid amounts', () => {
+    let state = createTestState(2);
+    state.phase = 'secondary-drop';
+    state.teams[0].esopRemaining = 8;
+    state.teams[0].employees = [{
+      id: 1, name: 'Test', role: 'Test', category: 'Engineering',
+      hardSkill: 0.5, softSkills: {}, bidAmount: 3,
+    }];
+    state = dropEmployee(state, 0, 1);
+    expect(state.teams[0].esopRemaining).toBe(9); // 8 + floor(50% of 3) = 8 + 1
   });
 
   it('dropEmployee adds to dropped list', () => {

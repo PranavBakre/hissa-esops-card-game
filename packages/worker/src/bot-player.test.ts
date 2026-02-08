@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { GameState, HiredEmployee, EmployeeCard } from '@esop-wars/shared';
+import type { GameState, HiredEmployee, EmployeeCard, EmployeeCategory } from '@esop-wars/shared';
 import { GAME, TEAM_DEFINITIONS } from '@esop-wars/shared';
 import {
   getBotDelay,
@@ -30,24 +30,24 @@ function createTestState(teamCount: number = 3): GameState {
   });
 }
 
-function makeEmployee(id: number, category: string = 'Engineering', hardSkill: number = 0.5): HiredEmployee {
+function makeEmployee(id: number, category: EmployeeCategory = 'Engineering', hardSkill: number = 0.5): HiredEmployee {
   return {
     id,
     name: `Emp ${id}`,
     role: 'Role',
-    category: category as HiredEmployee['category'],
+    category,
     hardSkill,
     softSkills: { Resilience: 0.5 },
     bidAmount: 2,
   };
 }
 
-function makeCard(id: number, category: string = 'Engineering', hardSkill: number = 0.5): EmployeeCard {
+function makeCard(id: number, category: EmployeeCategory = 'Engineering', hardSkill: number = 0.5): EmployeeCard {
   return {
     id,
     name: `Card ${id}`,
     role: 'Role',
-    category: category as EmployeeCard['category'],
+    category,
     hardSkill,
     softSkills: { Resilience: 0.5 },
   };
