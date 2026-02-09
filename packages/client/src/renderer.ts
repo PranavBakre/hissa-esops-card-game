@@ -1371,9 +1371,10 @@ function renderInvestmentConflict(): string {
             <span class="prefix">$</span>
             <input type="number" id="investment-bid-amount"
               value="${Math.max(GAME.INVESTMENT_MIN, highestBid + GAME.INVESTMENT_BID_INCREMENT)}"
-              min="${GAME.INVESTMENT_MIN}"
+              min="${Math.max(GAME.INVESTMENT_MIN, highestBid)}"
               max="${GAME.INVESTMENT_MAX}"
-              step="${GAME.INVESTMENT_BID_INCREMENT}">
+              step="${GAME.INVESTMENT_BID_INCREMENT}"
+              data-min-bid="${Math.max(GAME.INVESTMENT_MIN, highestBid)}">
             <span class="suffix">capital</span>
           </div>
           <div class="bid-actions">
@@ -2069,7 +2070,8 @@ function attachInvestmentListeners(): void {
     document.getElementById('place-investment-bid-btn')?.addEventListener('click', () => {
       if (bidInput) {
         const amount = parseInt(bidInput.value, 10);
-        if (!isNaN(amount) && amount >= GAME.INVESTMENT_MIN && amount <= GAME.INVESTMENT_MAX) {
+        const minBid = parseInt(bidInput.dataset.minBid ?? String(GAME.INVESTMENT_MIN), 10);
+        if (!isNaN(amount) && amount >= minBid && amount <= GAME.INVESTMENT_MAX) {
           placeInvestmentBid(amount);
         }
       }
