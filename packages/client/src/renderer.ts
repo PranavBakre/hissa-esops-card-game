@@ -34,6 +34,12 @@ import {
 } from './app';
 
 // ===========================================
+// UI State
+// ===========================================
+
+let decisionLogOpen = false;
+
+// ===========================================
 // Phase Intro Banner State
 // ===========================================
 
@@ -410,6 +416,7 @@ function renderGame(app: HTMLElement): void {
           ${content}
         </div>
       </div>
+      ${renderDecisionLog()}
     </div>
   `;
 
@@ -438,6 +445,31 @@ function renderGame(app: HTMLElement): void {
     const banner = document.getElementById('phase-intro-banner');
     if (banner) {
       banner.style.display = 'none';
+    }
+  });
+
+  // Log button listener
+  document.getElementById('log-btn')?.addEventListener('click', () => {
+    decisionLogOpen = !decisionLogOpen;
+    const panel = document.getElementById('decision-log-panel');
+    if (panel) {
+      panel.classList.toggle('open', decisionLogOpen);
+      // Auto-scroll to bottom when opening
+      if (decisionLogOpen) {
+        const logBody = panel.querySelector('.log-body');
+        if (logBody) {
+          logBody.scrollTop = logBody.scrollHeight;
+        }
+      }
+    }
+  });
+
+  // Close log panel
+  document.getElementById('close-log-btn')?.addEventListener('click', () => {
+    decisionLogOpen = false;
+    const panel = document.getElementById('decision-log-panel');
+    if (panel) {
+      panel.classList.remove('open');
     }
   });
 
@@ -493,6 +525,7 @@ function renderPhaseBar(): string {
             <button class="btn-speed ${state.gameSpeed === 'instant' ? 'active' : ''}" data-speed="instant">Instant</button>
           </div>
         ` : ''}
+        <button class="btn-rules" id="log-btn" title="Decision Log">&#128220;</button>
         <button class="btn-rules" id="rules-btn" title="Rules">?</button>
       </div>
     </div>
@@ -615,6 +648,49 @@ function renderMobileTeamStrip(): string {
           </div>
         `;
       }).join('')}
+    </div>
+  `;
+}
+
+// ===========================================
+// Decision Log Panel
+// ===========================================
+
+function renderDecisionLog(): string {
+  if (!state.gameState) return '';
+
+  const entries = state.gameState.decisionLog;
+
+  return `
+    <div class="decision-log-panel ${decisionLogOpen ? 'open' : ''}" id="decision-log-panel">
+      <div class="log-header">
+        <span class="log-title">Decision Log</span>
+        <button class="log-close" id="close-log-btn">&times;</button>
+      </div>
+      <div class="log-body">
+        ${entries.length === 0
+          ? '<div class="log-empty">No decisions yet.</div>'
+          : entries.map((entry) => {
+              const teamName = entry.teamIndex !== null
+                ? state.gameState?.teams[entry.teamIndex]?.name ?? '?'
+                : null;
+              const teamColor = entry.teamIndex !== null
+                ? state.gameState?.teams[entry.teamIndex]?.color ?? 'var(--text-muted)'
+                : null;
+              const phaseLabel = PHASE_LABELS[entry.phase] ?? entry.phase;
+              return `
+                <div class="log-entry">
+                  <span class="log-phase">${phaseLabel}</span>
+                  ${teamName
+                    ? `<span class="log-team" style="color: ${teamColor}">${teamName}</span>`
+                    : ''
+                  }
+                  <span class="log-message">${entry.message}</span>
+                </div>
+              `;
+            }).join('')
+        }
+      </div>
     </div>
   `;
 }

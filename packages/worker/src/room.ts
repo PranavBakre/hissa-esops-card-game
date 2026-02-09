@@ -107,6 +107,16 @@ function getEventDataString(data: unknown): string | null {
   return null;
 }
 
+function formatLogCurrency(value: number): string {
+  if (value >= 1_000_000 || value <= -1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000 || value <= -1_000) {
+    return `$${(value / 1_000).toFixed(0)}K`;
+  }
+  return `$${value}`;
+}
+
 // ===========================================
 // Session Data
 // ===========================================
@@ -649,6 +659,8 @@ export class GameRoom {
       name
     );
 
+    this.logDecision(session.teamIndex, `registered as "${name}"`);
+
     // Broadcast update
     this.broadcast({
       type: 'team-updated',
@@ -804,6 +816,12 @@ export class GameRoom {
       ideaId
     );
 
+    const lockedTeam = this.roomState.gameState.teams[session.teamIndex];
+    const bonusText = lockedTeam.setupBonus
+      ? ` (+${(lockedTeam.setupBonus.bonus.modifier * 100).toFixed(0)}% ${lockedTeam.setupBonus.bonus.category} bonus)`
+      : '';
+    this.logDecision(session.teamIndex, `locked ${lockedTeam.lockedSegment?.name} + ${lockedTeam.lockedIdea?.name}${bonusText}`);
+
     this.broadcast({
       type: 'team-updated',
       teamIndex: session.teamIndex,
@@ -886,6 +904,13 @@ export class GameRoom {
     // Apply wildcard modifiers to this round's results
     this.roomState.gameState = applyWildcardModifiers(this.roomState.gameState);
 
+    // Log wildcard choices
+    this.roomState.gameState.teams.forEach((t, i) => {
+      if (t.wildcardActiveThisRound && t.wildcardActiveThisRound !== 'pass') {
+        this.logDecision(i, `played wildcard: ${t.wildcardActiveThisRound}`);
+      }
+    });
+
     // Broadcast wildcard reveals
     this.broadcast({
       type: 'wildcards-revealed',
@@ -928,6 +953,11 @@ export class GameRoom {
     // Draw market card
     this.roomState.gameState = drawMarketCard(this.roomState.gameState);
 
+    const marketCard = this.roomState.gameState.currentMarketCard;
+    if (marketCard) {
+      this.logDecision(null, `market card drawn: ${marketCard.name}`);
+    }
+
     // Broadcast drawn card
     this.broadcast({
       type: 'market-card-drawn',
@@ -939,6 +969,13 @@ export class GameRoom {
 
     // Apply market leader bonus
     this.roomState.gameState = applyMarketLeaderBonus(this.roomState.gameState);
+
+    // Log round results
+    this.roomState.gameState.roundPerformance.forEach((perf) => {
+      const team = this.roomState!.gameState!.teams[perf.teamIndex];
+      const sign = perf.gain >= 0 ? '+' : '';
+      this.logDecision(perf.teamIndex, `capital ${sign}${formatLogCurrency(perf.gain)} (now ${formatLogCurrency(team.capital)})`);
+    });
 
     // Broadcast results (teams can now see their capital before wildcard decision)
     this.broadcast({
@@ -986,6 +1023,13 @@ export class GameRoom {
       session.teamIndex,
       targetTeamIndex
     );
+
+    if (targetTeamIndex !== null) {
+      const targetName = this.roomState.gameState.teams[targetTeamIndex].name;
+      this.logDecision(session.teamIndex, `wants to invest in ${targetName}`);
+    } else {
+      this.logDecision(session.teamIndex, `passed on investing`);
+    }
 
     this.broadcast({
       type: 'investment-declared',
@@ -1218,6 +1262,14 @@ export class GameRoom {
       }
     }
 
+    // Log each finalized investment
+    investments.forEach((inv) => {
+      const investorName = this.roomState!.gameState!.teams[inv.investor].name;
+      const targetName = this.roomState!.gameState!.teams[inv.target].name;
+      this.logDecision(inv.investor, `invested ${formatLogCurrency(inv.amount)} in ${targetName} for 5% equity`);
+      this.logDecision(inv.target, `received ${formatLogCurrency(inv.amount)} investment from ${investorName}`);
+    });
+
     this.broadcast({
       type: 'investment-resolved',
       investments,
@@ -1262,6 +1314,11 @@ export class GameRoom {
 
   private revealDropsAndStartSecondary(): void {
     if (!this.roomState?.gameState) return;
+
+    // Log dropped employees
+    this.roomState.gameState.droppedEmployees.forEach((d) => {
+      this.logDecision(d.fromTeamIndex, `released ${d.employee.name} (${d.employee.category})`);
+    });
 
     // Broadcast dropped employees
     this.broadcast({
@@ -1316,8 +1373,9 @@ export class GameRoom {
 
     const team = this.roomState.gameState.teams[session.teamIndex];
 
-    // Broadcast the drawn exit card
+    // Log and broadcast the drawn exit card
     if (team.exitChoice) {
+      this.logDecision(session.teamIndex, `drew ${team.exitChoice.name} (${team.exitChoice.multiplier}x exit multiplier)`);
       this.broadcast({
         type: 'exit-chosen',
         teamIndex: session.teamIndex,
@@ -1564,6 +1622,7 @@ export class GameRoom {
           index,
           botNames[nameIndex]
         );
+        this.logDecision(index, `registered as "${botNames[nameIndex]}"`);
         botCounter++;
 
         this.broadcast({
@@ -1674,6 +1733,15 @@ export class GameRoom {
     }
   }
 
+  private logDecision(teamIndex: number | null, message: string): void {
+    if (!this.roomState?.gameState) return;
+    this.roomState.gameState.decisionLog.push({
+      phase: this.roomState.gameState.phase,
+      teamIndex,
+      message,
+    });
+  }
+
   async alarm(): Promise<void> {
     // Load state in case DO hibernated
     await this.loadState();
@@ -1773,6 +1841,12 @@ export class GameRoom {
         decision.ideaId
       );
 
+      const lockedBot = this.roomState.gameState.teams[botIndex];
+      const bonusText = lockedBot.setupBonus
+        ? ` (+${(lockedBot.setupBonus.bonus.modifier * 100).toFixed(0)}% ${lockedBot.setupBonus.bonus.category} bonus)`
+        : '';
+      this.logDecision(botIndex, `locked ${lockedBot.lockedSegment?.name} + ${lockedBot.lockedIdea?.name}${bonusText}`);
+
       this.broadcast({
         type: 'team-updated',
         teamIndex: botIndex,
@@ -1855,6 +1929,12 @@ export class GameRoom {
       this.roomState.gameState = closeBidding(this.roomState.gameState);
     }
 
+    if (previousBid) {
+      this.logDecision(previousBid.teamIndex, `hired ${card.name} (${card.category}) for ${previousBid.amount}% ESOP`);
+    } else {
+      this.logDecision(null, `no bids for ${card.name} (${card.category})`);
+    }
+
     this.broadcast({
       type: 'bidding-closed',
       winner: previousBid,
@@ -1919,6 +1999,13 @@ export class GameRoom {
       botIndex,
       target
     );
+
+    if (target !== null) {
+      const targetName = this.roomState.gameState.teams[target].name;
+      this.logDecision(botIndex, `wants to invest in ${targetName}`);
+    } else {
+      this.logDecision(botIndex, `passed on investing`);
+    }
 
     this.broadcast({
       type: 'investment-declared',
@@ -2112,9 +2199,10 @@ export class GameRoom {
       turn
     );
 
-    // Broadcast the drawn exit card
+    // Log and broadcast the drawn exit card
     const updatedTeam = this.roomState.gameState.teams[turn];
     if (updatedTeam.exitChoice) {
+      this.logDecision(turn, `drew ${updatedTeam.exitChoice.name} (${updatedTeam.exitChoice.multiplier}x exit multiplier)`);
       this.broadcast({
         type: 'exit-chosen',
         teamIndex: turn,
@@ -2182,6 +2270,11 @@ export class GameRoom {
     // Draw market card
     this.roomState.gameState = drawMarketCard(this.roomState.gameState);
 
+    const spectatorMarketCard = this.roomState.gameState.currentMarketCard;
+    if (spectatorMarketCard) {
+      this.logDecision(null, `market card drawn: ${spectatorMarketCard.name}`);
+    }
+
     // Broadcast drawn card
     this.broadcast({
       type: 'market-card-drawn',
@@ -2195,6 +2288,13 @@ export class GameRoom {
     this.roomState.gameState = applyMarketLeaderBonus(this.roomState.gameState);
 
     // Broadcast results (bots can now see capital before wildcard decision)
+    // Log round results
+    this.roomState.gameState.roundPerformance.forEach((perf) => {
+      const perfTeam = this.roomState!.gameState!.teams[perf.teamIndex];
+      const sign = perf.gain >= 0 ? '+' : '';
+      this.logDecision(perf.teamIndex, `capital ${sign}${formatLogCurrency(perf.gain)} (now ${formatLogCurrency(perfTeam.capital)})`);
+    });
+
     this.broadcast({
       type: 'market-results',
       performance: this.roomState.gameState.roundPerformance,

@@ -188,6 +188,8 @@ export function createInitialState(config: GameConfig): GameState {
 
     exitDeck: [],
     currentExitTurn: 0,
+
+    decisionLog: [],
   };
 }
 

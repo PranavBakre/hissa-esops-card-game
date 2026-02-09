@@ -109,6 +109,9 @@ export interface GameState {
   // Exit
   exitDeck: ExitCard[];
   currentExitTurn: number;
+
+  // Decision Log
+  decisionLog: DecisionLogEntry[];
 }
 
 export interface Bid {
@@ -259,6 +262,16 @@ export interface SoftSkill {
   name: string;
   icon: string;
   description: string;
+}
+
+// ===========================================
+// Decision Log
+// ===========================================
+
+export interface DecisionLogEntry {
+  phase: Phase;
+  teamIndex: number | null;
+  message: string;
 }
 
 // ===========================================
