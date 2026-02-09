@@ -13,6 +13,7 @@ export type Phase =
   | 'setup-summary'
   | 'auction'
   | 'auction-summary'
+  | 'investment'
   | 'seed'
   | 'early'
   | 'secondary-drop'
@@ -26,6 +27,8 @@ export type RoomStatus = 'LOBBY' | 'PLAYING' | 'FINISHED';
 export type SetupPhase = 'drop' | 'draw';
 
 export type WildcardChoice = 'double-down' | 'shield' | 'pass';
+
+export type InvestmentSubPhase = 'declare' | 'conflict' | 'resolve-tie' | 'summary';
 
 export type GameSpeed = 'normal' | 'fast' | 'instant';
 
@@ -91,6 +94,14 @@ export interface GameState {
   usedMarketCards: MarketCard[];
   roundPerformance: RoundPerformance[];
 
+  // Investment
+  investmentSubPhase: InvestmentSubPhase;
+  investmentDeclarations: Record<number, number | null>;
+  investmentBids: Record<number, number>;
+  investmentConflicts: Record<number, number[]>;
+  investmentTieTarget: number | null;
+  investmentBotCeilings: Record<number, number>;
+
   // Secondary
   droppedEmployees: DroppedEmployee[];
   secondaryPool: EmployeeCard[];
@@ -107,8 +118,8 @@ export interface Bid {
 
 export interface RoundPerformance {
   teamIndex: number;
-  previousValuation: number;
-  newValuation: number;
+  previousCapital: number;
+  newCapital: number;
   gain: number;
   percentChange: number;
 }
@@ -126,7 +137,7 @@ export interface Team {
   name: string;
   color: string;
   esopRemaining: number;
-  valuation: number;
+  capital: number;
   employees: HiredEmployee[];
   isComplete: boolean;
   isDisqualified: boolean;
@@ -144,14 +155,20 @@ export interface Team {
   wildcardActiveThisRound: WildcardChoice | null;
 
   // Market Leader
-  previousValuation: number;
+  previousCapital: number;
   currentGain: number;
   isMarketLeader: boolean;
   marketLeaderCount: number;
 
+  // Investment
+  investedInTeamIndex: number | null;
+  investmentAmount: number;
+  investorTeamIndex: number | null;
+  capitalAtInvestment: number;
+
   // Exit
   exitChoice: ExitCard | null;
-  preExitValuation: number;
+  preExitCapital: number;
 }
 
 export interface TeamConfig {
@@ -262,6 +279,10 @@ export type ClientMessage =
   | { type: 'lock-setup'; segmentId: number; ideaId: number }
   | { type: 'place-bid'; amount: number }
   | { type: 'pass-bid' }
+  | { type: 'declare-investment'; targetTeamIndex: number | null }
+  | { type: 'place-investment-bid'; amount: number }
+  | { type: 'pass-investment-bid' }
+  | { type: 'resolve-investment-tie'; chosenTeamIndex: number }
   | { type: 'advance-phase' }
   | { type: 'select-wildcard'; choice: WildcardChoice }
   | { type: 'draw-market' }
@@ -289,6 +310,12 @@ export type ServerMessage =
   | { type: 'employee-dropped'; teamIndex: number }
   | { type: 'drops-revealed'; dropped: DroppedEmployee[] }
   | { type: 'exit-chosen'; teamIndex: number; exitCard: ExitCard }
+  | { type: 'investment-declared'; teamIndex: number }
+  | { type: 'investment-conflict'; targetTeamIndex: number; competitors: number[] }
+  | { type: 'investment-bid-placed'; teamIndex: number; amount: number }
+  | { type: 'investment-bid-passed'; teamIndex: number }
+  | { type: 'investment-resolved'; investments: { investor: number; target: number; amount: number }[] }
+  | { type: 'investment-tie'; targetTeamIndex: number; tiedTeams: { teamIndex: number; amount: number }[] }
   | { type: 'error'; message: string };
 
 // ===========================================
@@ -307,6 +334,7 @@ export interface ValidationResult {
 export interface Winners {
   founder: Team;
   employer: Team;
+  investor: { team: Team; returnMultiple: number } | null;
   sameTeam: boolean;
 }
 
@@ -316,12 +344,12 @@ export interface Winners {
 
 export interface GameConfig {
   teams: TeamConfig[];
-  initialValuation: number;
+  initialCapital: number;
   initialEsop: number;
 }
 
 // Default values
-export const DEFAULT_INITIAL_VALUATION = 20_000_000;
+export const DEFAULT_INITIAL_CAPITAL = 20_000_000;
 export const DEFAULT_INITIAL_ESOP = 12;
 export const MAX_TEAM_COUNT = 5;
 export const MIN_TEAM_COUNT = 2;

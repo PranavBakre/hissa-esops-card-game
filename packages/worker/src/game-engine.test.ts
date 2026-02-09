@@ -31,6 +31,16 @@ import {
   canTeamAct,
   getActiveTeams,
   getWinners,
+  declareInvestment,
+  allInvestmentsDeclared,
+  resolveInvestmentConflicts,
+  placeInvestmentBid,
+  passInvestmentBid,
+  allConflictBidsPlaced,
+  resolveConflictBids,
+  resolveInvestmentTie,
+  finalizeInvestments,
+  getInvestorWinner,
 } from './game-engine';
 
 // ===========================================
@@ -50,7 +60,7 @@ function createTestConfig(teamCount: number, options?: { bots?: boolean[] }): Ga
   }
   return {
     teams,
-    initialValuation: GAME.INITIAL_VALUATION,
+    initialCapital: GAME.INITIAL_CAPITAL,
     initialEsop: GAME.INITIAL_ESOP,
   };
 }
@@ -111,7 +121,7 @@ describe('createInitialState', () => {
   it('sets initial team values correctly', () => {
     const state = createTestState(3);
     for (const team of state.teams) {
-      expect(team.valuation).toBe(GAME.INITIAL_VALUATION);
+      expect(team.capital).toBe(GAME.INITIAL_CAPITAL);
       expect(team.esopRemaining).toBe(GAME.INITIAL_ESOP);
       expect(team.employees).toHaveLength(0);
       expect(team.isComplete).toBe(false);
@@ -435,7 +445,7 @@ describe('auction', () => {
     }
     // Each team missing 3 employees = $3M penalty
     for (const team of s.teams) {
-      expect(team.valuation).toBe(GAME.INITIAL_VALUATION - 3_000_000);
+      expect(team.capital).toBe(GAME.INITIAL_CAPITAL - 3_000_000);
     }
   });
 
@@ -473,7 +483,7 @@ describe('market rounds', () => {
     expect(state.currentMarketCard).not.toBeNull();
   });
 
-  it('applyMarketEffects changes valuations and records performance', () => {
+  it('applyMarketEffects changes capitals and records performance', () => {
     let state = createTestState(3);
     state = registerAllTeams(state);
     state = completeSetup(state);
@@ -493,12 +503,12 @@ describe('market rounds', () => {
 
     state = advancePhase(state); // auction-summary -> seed
     state = drawMarketCard(state);
-    const prevValuations = state.teams.map((t) => t.valuation);
+    const prevCapitals = state.teams.map((t) => t.capital);
     state = applyMarketEffects(state);
 
     expect(state.roundPerformance).toHaveLength(3);
-    // At least some valuations should change (employees have skills)
-    const changed = state.teams.some((t, i) => t.valuation !== prevValuations[i]);
+    // At least some capitals should change (employees have skills)
+    const changed = state.teams.some((t, i) => t.capital !== prevCapitals[i]);
     expect(changed).toBe(true);
   });
 
@@ -544,14 +554,14 @@ describe('market rounds', () => {
     expect(leaders).toHaveLength(2);
   });
 
-  it('market leader gets 20% valuation bonus', () => {
+  it('market leader gets 20% capital bonus', () => {
     let state = createTestState(2);
-    state.teams[0].valuation = 10_000_000;
+    state.teams[0].capital = 10_000_000;
     state.teams[0].currentGain = 1000;
-    state.teams[1].valuation = 8_000_000;
+    state.teams[1].capital = 8_000_000;
     state.teams[1].currentGain = 500;
     state = applyMarketLeaderBonus(state);
-    expect(state.teams[0].valuation).toBe(12_000_000); // 10M * 1.2
+    expect(state.teams[0].capital).toBe(12_000_000); // 10M * 1.2
   });
 });
 
@@ -601,50 +611,50 @@ describe('wildcards', () => {
 
   it('double-down doubles the round gain', () => {
     let state = createTestState(2);
-    state.teams[0].previousValuation = 10_000_000;
-    state.teams[0].valuation = 12_000_000; // gained 2M
+    state.teams[0].previousCapital = 10_000_000;
+    state.teams[0].capital = 12_000_000; // gained 2M
     state.teams[0].wildcardActiveThisRound = 'double-down';
     state.roundPerformance = [{
       teamIndex: 0,
-      previousValuation: 10_000_000,
-      newValuation: 12_000_000,
+      previousCapital: 10_000_000,
+      newCapital: 12_000_000,
       gain: 2_000_000,
       percentChange: 20,
     }];
     state = applyWildcardModifiers(state);
-    expect(state.teams[0].valuation).toBe(14_000_000); // 12M + 2M doubled
+    expect(state.teams[0].capital).toBe(14_000_000); // 12M + 2M doubled
   });
 
   it('shield reverts losses', () => {
     let state = createTestState(2);
-    state.teams[0].previousValuation = 10_000_000;
-    state.teams[0].valuation = 8_000_000; // lost 2M
+    state.teams[0].previousCapital = 10_000_000;
+    state.teams[0].capital = 8_000_000; // lost 2M
     state.teams[0].wildcardActiveThisRound = 'shield';
     state.roundPerformance = [{
       teamIndex: 0,
-      previousValuation: 10_000_000,
-      newValuation: 8_000_000,
+      previousCapital: 10_000_000,
+      newCapital: 8_000_000,
       gain: -2_000_000,
       percentChange: -20,
     }];
     state = applyWildcardModifiers(state);
-    expect(state.teams[0].valuation).toBe(10_000_000); // restored
+    expect(state.teams[0].capital).toBe(10_000_000); // restored
   });
 
   it('shield does nothing on gains', () => {
     let state = createTestState(2);
-    state.teams[0].previousValuation = 10_000_000;
-    state.teams[0].valuation = 12_000_000; // gained 2M
+    state.teams[0].previousCapital = 10_000_000;
+    state.teams[0].capital = 12_000_000; // gained 2M
     state.teams[0].wildcardActiveThisRound = 'shield';
     state.roundPerformance = [{
       teamIndex: 0,
-      previousValuation: 10_000_000,
-      newValuation: 12_000_000,
+      previousCapital: 10_000_000,
+      newCapital: 12_000_000,
       gain: 2_000_000,
       percentChange: 20,
     }];
     state = applyWildcardModifiers(state);
-    expect(state.teams[0].valuation).toBe(12_000_000); // unchanged
+    expect(state.teams[0].capital).toBe(12_000_000); // unchanged
   });
 });
 
@@ -766,16 +776,16 @@ describe('exit', () => {
     expect(allExitsChosen(state)).toBe(true);
   });
 
-  it('applyExitMultipliers multiplies valuations', () => {
+  it('applyExitMultipliers multiplies capitals', () => {
     let state = createTestState(2);
-    state.teams[0].valuation = 10_000_000;
+    state.teams[0].capital = 10_000_000;
     state.teams[0].exitChoice = { id: 1, name: 'IPO', multiplier: 2.0, description: '' };
-    state.teams[1].valuation = 10_000_000;
+    state.teams[1].capital = 10_000_000;
     state.teams[1].exitChoice = { id: 6, name: 'Fire Sale', multiplier: 0.5, description: '' };
 
     state = applyExitMultipliers(state);
-    expect(state.teams[0].valuation).toBe(20_000_000);
-    expect(state.teams[1].valuation).toBe(5_000_000);
+    expect(state.teams[0].capital).toBe(20_000_000);
+    expect(state.teams[1].capital).toBe(5_000_000);
     expect(state.phase).toBe('winner');
   });
 });
@@ -788,7 +798,7 @@ describe('advancePhase', () => {
   it('follows correct phase order', () => {
     const expectedOrder = [
       'registration', 'setup', 'setup-lock', 'setup-summary',
-      'auction', 'auction-summary', 'seed', 'early',
+      'auction', 'auction-summary', 'investment', 'seed', 'early',
       'secondary-drop', 'secondary-hire', 'mature', 'exit', 'winner',
     ];
 
@@ -827,13 +837,13 @@ describe('query functions', () => {
   it('getWinners returns founder and employer', () => {
     let state = createTestState(2);
     state.phase = 'winner';
-    // Team 0: 30M valuation, 2 ESOP spent -> (2/12)*30M = 5M employer score
-    state.teams[0].valuation = 30_000_000;
+    // Team 0: 30M capital, 2 ESOP spent -> (2/12)*30M = 5M employer score
+    state.teams[0].capital = 30_000_000;
     state.teams[0].employees = [
       { id: 1, name: 'A', role: 'A', category: 'Engineering', hardSkill: 0.5, softSkills: {}, bidAmount: 2 },
     ];
-    // Team 1: 20M valuation, 10 ESOP spent -> (10/12)*20M = 16.7M employer score (best employer)
-    state.teams[1].valuation = 20_000_000;
+    // Team 1: 20M capital, 10 ESOP spent -> (10/12)*20M = 16.7M employer score (best employer)
+    state.teams[1].capital = 20_000_000;
     state.teams[1].employees = [
       { id: 2, name: 'B', role: 'B', category: 'Sales', hardSkill: 0.5, softSkills: {}, bidAmount: 10 },
     ];
@@ -843,5 +853,329 @@ describe('query functions', () => {
     expect(winners!.founder.name).toBe(state.teams[0].name);
     expect(winners!.employer.name).toBe(state.teams[1].name);
     expect(winners!.sameTeam).toBe(false);
+  });
+
+  it('getWinners includes investor when someone invested', () => {
+    let state = createTestState(3);
+    state.phase = 'winner';
+    state.teams[0].capital = 30_000_000;
+    state.teams[0].employees = [
+      { id: 1, name: 'A', role: 'A', category: 'Engineering', hardSkill: 0.5, softSkills: {}, bidAmount: 2 },
+    ];
+    state.teams[1].capital = 20_000_000;
+    state.teams[1].employees = [
+      { id: 2, name: 'B', role: 'B', category: 'Sales', hardSkill: 0.5, softSkills: {}, bidAmount: 10 },
+    ];
+    // Team 2 invested 500K in team 0
+    state.teams[2].investedInTeamIndex = 0;
+    state.teams[2].investmentAmount = 500_000;
+    state.teams[2].capital = 19_500_000;
+
+    const winners = getWinners(state);
+    expect(winners).not.toBeNull();
+    expect(winners!.investor).not.toBeNull();
+    expect(winners!.investor!.team.name).toBe(state.teams[2].name);
+    // Return multiple: (0.05 * 30M) / 500K = 3.0
+    expect(winners!.investor!.returnMultiple).toBe(3);
+  });
+
+  it('getWinners returns null investor when no one invested', () => {
+    let state = createTestState(2);
+    state.phase = 'winner';
+    state.teams[0].capital = 30_000_000;
+    state.teams[0].employees = [
+      { id: 1, name: 'A', role: 'A', category: 'Engineering', hardSkill: 0.5, softSkills: {}, bidAmount: 2 },
+    ];
+    state.teams[1].capital = 20_000_000;
+    state.teams[1].employees = [
+      { id: 2, name: 'B', role: 'B', category: 'Sales', hardSkill: 0.5, softSkills: {}, bidAmount: 10 },
+    ];
+
+    const winners = getWinners(state);
+    expect(winners).not.toBeNull();
+    expect(winners!.investor).toBeNull();
+  });
+});
+
+// ===========================================
+// Investment Phase
+// ===========================================
+
+describe('investment phase', () => {
+  function createInvestmentState(teamCount: number = 3): GameState {
+    let state = createTestState(teamCount);
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    state.investmentDeclarations = {};
+    state.investmentBids = {};
+    state.investmentConflicts = {};
+    state.investmentTieTarget = null;
+    state.investmentBotCeilings = {};
+    return state;
+  }
+
+  it('declareInvestment records choice', () => {
+    let state = createInvestmentState();
+    state = declareInvestment(state, 0, 1);
+    expect(state.investmentDeclarations[0]).toBe(1);
+  });
+
+  it('declareInvestment records pass as null', () => {
+    let state = createInvestmentState();
+    state = declareInvestment(state, 0, null);
+    expect(state.investmentDeclarations[0]).toBeNull();
+  });
+
+  it('allInvestmentsDeclared returns false when not all declared', () => {
+    let state = createInvestmentState();
+    state = declareInvestment(state, 0, 1);
+    expect(allInvestmentsDeclared(state)).toBe(false);
+  });
+
+  it('allInvestmentsDeclared returns true when all declared', () => {
+    let state = createInvestmentState();
+    state = declareInvestment(state, 0, 1);
+    state = declareInvestment(state, 1, null);
+    state = declareInvestment(state, 2, null);
+    expect(allInvestmentsDeclared(state)).toBe(true);
+  });
+
+  it('no conflicts: unique targets finalize directly', () => {
+    let state = createInvestmentState();
+    state = declareInvestment(state, 0, 1);
+    state = declareInvestment(state, 1, 2);
+    state = declareInvestment(state, 2, null);
+    state = resolveInvestmentConflicts(state);
+
+    expect(state.investmentSubPhase).toBe('summary');
+    expect(state.teams[0].investedInTeamIndex).toBe(1);
+    expect(state.teams[1].investedInTeamIndex).toBe(2);
+    expect(state.teams[2].investedInTeamIndex).toBeNull();
+  });
+
+  it('everyone passes: summary with no investments', () => {
+    let state = createInvestmentState();
+    state = declareInvestment(state, 0, null);
+    state = declareInvestment(state, 1, null);
+    state = declareInvestment(state, 2, null);
+    state = resolveInvestmentConflicts(state);
+
+    expect(state.investmentSubPhase).toBe('summary');
+    expect(state.teams.every((t) => t.investedInTeamIndex === null)).toBe(true);
+  });
+
+  it('conflict detected when 2+ teams target same company', () => {
+    let state = createInvestmentState();
+    state = declareInvestment(state, 0, 2);
+    state = declareInvestment(state, 1, 2);
+    state = declareInvestment(state, 2, null);
+    state = resolveInvestmentConflicts(state);
+
+    expect(state.investmentSubPhase).toBe('conflict');
+    expect(state.investmentConflicts[2]).toEqual([0, 1]);
+  });
+
+  it('placeInvestmentBid records bid', () => {
+    let state = createInvestmentState();
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    state = placeInvestmentBid(state, 0, 600_000);
+    expect(state.investmentBids[0]).toBe(600_000);
+  });
+
+  it('passInvestmentBid marks as passed with -1', () => {
+    let state = createInvestmentState();
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    state = passInvestmentBid(state, 0);
+    expect(state.investmentBids[0]).toBe(-1);
+  });
+
+  it('allConflictBidsPlaced checks all competitors', () => {
+    let state = createInvestmentState();
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+
+    expect(allConflictBidsPlaced(state, 2)).toBe(false);
+    state = placeInvestmentBid(state, 0, 500_000);
+    expect(allConflictBidsPlaced(state, 2)).toBe(false);
+    state = placeInvestmentBid(state, 1, 600_000);
+    expect(allConflictBidsPlaced(state, 2)).toBe(true);
+  });
+
+  it('all competitors passing means no investment for that target', () => {
+    let state = createInvestmentState();
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    state = passInvestmentBid(state, 0);
+    state = passInvestmentBid(state, 1);
+    state = resolveConflictBids(state, 2);
+
+    // No one gets to invest in team 2
+    expect(state.investmentSubPhase).toBe('summary');
+  });
+
+  it('highest bidder wins conflict', () => {
+    let state = createInvestmentState();
+    state = declareInvestment(state, 0, 2);
+    state = declareInvestment(state, 1, 2);
+    state = declareInvestment(state, 2, null);
+    state = resolveInvestmentConflicts(state);
+
+    state = placeInvestmentBid(state, 0, 500_000);
+    state = placeInvestmentBid(state, 1, 700_000);
+    state = resolveConflictBids(state, 2);
+
+    // Team 1 wins, team 0's declaration becomes null
+    expect(state.investmentSubPhase).toBe('summary');
+    expect(state.teams[1].investmentAmount).toBe(700_000);
+    expect(state.investmentDeclarations[0]).toBeNull();
+  });
+
+  it('tie triggers resolve-tie sub-phase', () => {
+    let state = createInvestmentState();
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    state = placeInvestmentBid(state, 0, 600_000);
+    state = placeInvestmentBid(state, 1, 600_000);
+    state = resolveConflictBids(state, 2);
+
+    expect(state.investmentSubPhase).toBe('resolve-tie');
+    expect(state.investmentTieTarget).toBe(2);
+  });
+
+  it('resolveInvestmentTie picks the chosen team', () => {
+    let state = createInvestmentState();
+    state.investmentSubPhase = 'resolve-tie';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    state.investmentBids = { 0: 600_000, 1: 600_000 };
+    state.investmentDeclarations = { 0: 2, 1: 2, 2: null };
+    state = resolveInvestmentTie(state, 2, 0);
+
+    // Team 0 wins, team 1's declaration is null
+    expect(state.investmentSubPhase).toBe('summary');
+    expect(state.teams[0].investmentAmount).toBe(600_000);
+    expect(state.investmentDeclarations[1]).toBeNull();
+  });
+
+  it('finalizeInvestments transfers capital correctly', () => {
+    let state = createInvestmentState();
+    state.teams[0].capital = 20_000_000;
+    state.teams[1].capital = 20_000_000;
+    state.investmentDeclarations = { 0: 1, 1: null, 2: null };
+    // Team 0 invests 500K in team 1
+    state.teams[0].investmentAmount = 0; // will default to INVESTMENT_MIN
+    state = finalizeInvestments(state);
+
+    expect(state.teams[0].capital).toBe(19_500_000); // 20M - 500K
+    expect(state.teams[1].capital).toBe(20_500_000); // 20M + 500K
+    expect(state.teams[0].investedInTeamIndex).toBe(1);
+    expect(state.teams[1].investorTeamIndex).toBe(0);
+    expect(state.teams[0].capitalAtInvestment).toBe(20_000_000); // snapshot before transfer
+  });
+
+  it('finalizeInvestments uses stored amount from conflict', () => {
+    let state = createInvestmentState();
+    state.teams[0].capital = 20_000_000;
+    state.teams[1].capital = 20_000_000;
+    state.investmentDeclarations = { 0: 1, 1: null, 2: null };
+    state.teams[0].investmentAmount = 750_000; // from conflict resolution
+    state = finalizeInvestments(state);
+
+    expect(state.teams[0].capital).toBe(19_250_000);
+    expect(state.teams[1].capital).toBe(20_750_000);
+    expect(state.teams[0].investmentAmount).toBe(750_000);
+  });
+
+  it('getInvestorWinner returns highest return multiple', () => {
+    let state = createTestState(3);
+    state.phase = 'winner';
+    // Team 0 invested 500K in team 1 (which ended at 30M)
+    state.teams[0].investedInTeamIndex = 1;
+    state.teams[0].investmentAmount = 500_000;
+    state.teams[1].capital = 30_000_000;
+    // Team 2 invested 1M in team 0 (which ended at 20M)
+    state.teams[2].investedInTeamIndex = 0;
+    state.teams[2].investmentAmount = 1_000_000;
+    state.teams[0].capital = 20_000_000;
+
+    const winner = getInvestorWinner(state);
+    expect(winner).not.toBeNull();
+    // Team 0: (0.05 * 30M) / 500K = 3.0
+    // Team 2: (0.05 * 20M) / 1M = 1.0
+    expect(winner!.team.name).toBe(state.teams[0].name);
+    expect(winner!.returnMultiple).toBe(3);
+  });
+
+  it('getInvestorWinner tiebreaker: lower investment wins', () => {
+    let state = createTestState(3);
+    state.phase = 'winner';
+    // Both get same return multiple but team 0 invested less
+    state.teams[0].investedInTeamIndex = 1;
+    state.teams[0].investmentAmount = 500_000;
+    state.teams[1].capital = 20_000_000;
+    state.teams[2].investedInTeamIndex = 0;
+    state.teams[2].investmentAmount = 1_000_000;
+    state.teams[0].capital = 40_000_000;
+    // Team 0: (0.05 * 20M) / 500K = 2.0
+    // Team 2: (0.05 * 40M) / 1M = 2.0
+
+    const winner = getInvestorWinner(state);
+    expect(winner).not.toBeNull();
+    expect(winner!.team.name).toBe(state.teams[0].name);
+  });
+
+  it('getInvestorWinner returns null when no one invested', () => {
+    let state = createTestState(3);
+    state.phase = 'winner';
+    expect(getInvestorWinner(state)).toBeNull();
+  });
+
+  it('phase order includes investment between auction-summary and seed', () => {
+    let state = createTestState(2);
+    state.phase = 'auction-summary';
+    state = advancePhase(state);
+    expect(state.phase).toBe('investment');
+    expect(state.investmentSubPhase).toBe('declare');
+    state = advancePhase(state);
+    expect(state.phase).toBe('seed');
+  });
+
+  it('multiple conflicts resolve sequentially (lowest target first)', () => {
+    let state = createInvestmentState(5);
+    // Teams 0,1 both target team 4; teams 2,3 both target team 1
+    state = declareInvestment(state, 0, 4);
+    state = declareInvestment(state, 1, 4);
+    state = declareInvestment(state, 2, 1);
+    state = declareInvestment(state, 3, 1);
+    state = declareInvestment(state, 4, null);
+    state = resolveInvestmentConflicts(state);
+
+    // Should resolve target 1 first (lowest index)
+    expect(state.investmentSubPhase).toBe('conflict');
+    expect(state.investmentTieTarget).toBe(1);
+
+    // Resolve first conflict
+    state = placeInvestmentBid(state, 2, 800_000);
+    state = placeInvestmentBid(state, 3, 600_000);
+    state = resolveConflictBids(state, 1);
+
+    // Now should move to target 4
+    expect(state.investmentSubPhase).toBe('conflict');
+    expect(state.investmentTieTarget).toBe(4);
+
+    // Resolve second conflict
+    state = placeInvestmentBid(state, 0, 500_000);
+    state = placeInvestmentBid(state, 1, 900_000);
+    state = resolveConflictBids(state, 4);
+
+    // All resolved -> summary
+    expect(state.investmentSubPhase).toBe('summary');
   });
 });

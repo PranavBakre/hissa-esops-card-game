@@ -10,6 +10,10 @@ import {
   decideWildcard,
   decideSecondaryDrop,
   decideRegistration,
+  decideInvestmentTarget,
+  decideBotMaxBid,
+  decideInvestmentBid,
+  decideInvestmentTieResolution,
 } from './bot-player';
 import { createInitialState, registerTeam, advancePhase } from './game-engine';
 
@@ -25,7 +29,7 @@ function createTestState(teamCount: number = 3): GameState {
       playerId: null,
       isBot: true,
     })),
-    initialValuation: GAME.INITIAL_VALUATION,
+    initialCapital: GAME.INITIAL_CAPITAL,
     initialEsop: GAME.INITIAL_ESOP,
   });
 }
@@ -341,5 +345,142 @@ describe('decideSecondaryDrop', () => {
 
     const dropped = decideSecondaryDrop(state, 0);
     expect(dropped).toBeNull();
+  });
+});
+
+// ===========================================
+// Investment Decisions
+// ===========================================
+
+describe('decideInvestmentTarget', () => {
+  it('returns a valid team index or null', () => {
+    const state = createTestState(3);
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+
+    for (let i = 0; i < 50; i++) {
+      const target = decideInvestmentTarget(state, 0);
+      if (target !== null) {
+        expect(target).not.toBe(0); // never self
+        expect(target).toBeGreaterThanOrEqual(0);
+        expect(target).toBeLessThan(3);
+      }
+    }
+  });
+
+  it('never returns self', () => {
+    const state = createTestState(3);
+    state.phase = 'investment';
+
+    for (let i = 0; i < 100; i++) {
+      const target = decideInvestmentTarget(state, 1);
+      expect(target).not.toBe(1);
+    }
+  });
+
+  it('never targets a team with an investor', () => {
+    const state = createTestState(3);
+    state.phase = 'investment';
+    state.teams[1].investorTeamIndex = 2; // team 1 already has an investor
+
+    for (let i = 0; i < 50; i++) {
+      const target = decideInvestmentTarget(state, 0);
+      expect(target).not.toBe(1);
+    }
+  });
+
+  it('passes if already invested', () => {
+    const state = createTestState(3);
+    state.phase = 'investment';
+    state.teams[0].investedInTeamIndex = 1;
+
+    const target = decideInvestmentTarget(state, 0);
+    expect(target).toBeNull();
+  });
+
+  it('passes if no eligible targets', () => {
+    const state = createTestState(2);
+    state.phase = 'investment';
+    state.teams[1].investorTeamIndex = 0; // only other team has an investor
+
+    const target = decideInvestmentTarget(state, 0);
+    expect(target).toBeNull();
+  });
+});
+
+describe('decideBotMaxBid', () => {
+  it('returns a value in [$500K, $1M]', () => {
+    for (let i = 0; i < 50; i++) {
+      const ceiling = decideBotMaxBid();
+      expect(ceiling).toBeGreaterThanOrEqual(500_000);
+      expect(ceiling).toBeLessThanOrEqual(1_000_000);
+    }
+  });
+
+  it('is snapped to $50K increments', () => {
+    for (let i = 0; i < 50; i++) {
+      const ceiling = decideBotMaxBid();
+      expect(ceiling % 50_000).toBe(0);
+    }
+  });
+});
+
+describe('decideInvestmentBid', () => {
+  it('returns amount in valid range or null', () => {
+    const state = createTestState(3);
+    state.investmentBotCeilings = { 0: 800_000 };
+
+    for (let i = 0; i < 50; i++) {
+      const bid = decideInvestmentBid(state, 0, 0);
+      if (bid !== null) {
+        expect(bid).toBeGreaterThanOrEqual(500_000);
+        expect(bid).toBeLessThanOrEqual(1_000_000);
+        expect(bid).toBeLessThanOrEqual(800_000); // bot's ceiling
+      }
+    }
+  });
+
+  it('drops out when ceiling exceeded', () => {
+    const state = createTestState(3);
+    state.investmentBotCeilings = { 0: 500_000 };
+
+    // With current highest at 500K, bot needs to go higher but ceiling is 500K
+    const bid = decideInvestmentBid(state, 0, 500_000);
+    expect(bid).toBeNull();
+  });
+
+  it('starts at minimum when no current bids', () => {
+    const state = createTestState(3);
+    state.investmentBotCeilings = { 0: 1_000_000 };
+
+    const bid = decideInvestmentBid(state, 0, 0);
+    expect(bid).toBe(500_000);
+  });
+});
+
+describe('decideInvestmentTieResolution', () => {
+  it('returns a valid tied team index', () => {
+    const state = createTestState(3);
+    const tiedTeams = [
+      { teamIndex: 0, amount: 600_000 },
+      { teamIndex: 1, amount: 600_000 },
+    ];
+
+    for (let i = 0; i < 20; i++) {
+      const chosen = decideInvestmentTieResolution(state, 2, tiedTeams);
+      expect([0, 1]).toContain(chosen);
+    }
+  });
+
+  it('prefers higher bidder when amounts differ', () => {
+    const state = createTestState(3);
+    const tiedTeams = [
+      { teamIndex: 0, amount: 700_000 },
+      { teamIndex: 1, amount: 600_000 },
+    ];
+
+    // Should always pick team 0 since they bid more
+    const chosen = decideInvestmentTieResolution(state, 2, tiedTeams);
+    expect(chosen).toBe(0);
   });
 });

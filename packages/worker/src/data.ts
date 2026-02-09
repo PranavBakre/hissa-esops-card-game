@@ -20,7 +20,7 @@ import type {
 export const categoryPerks: CategoryPerks = {
   Engineering: {
     name: 'Ship Fast',
-    description: 'Extra valuation boost during Rapid Scaling',
+    description: 'Extra capital boost during Rapid Scaling',
     icon: '',
     effect: 'engineering_scaling',
   },
@@ -32,7 +32,7 @@ export const categoryPerks: CategoryPerks = {
   },
   Sales: {
     name: 'Deal Closer',
-    description: '+5% valuation with 2+ Sales employees',
+    description: '+5% capital with 2+ Sales employees',
     icon: '',
     effect: 'sales_synergy',
   },

@@ -13,6 +13,10 @@ import {
   validateDrawMarket,
   validateDropEmployee,
   validateDrawExit,
+  validateDeclareInvestment,
+  validatePlaceInvestmentBid,
+  validatePassInvestmentBid,
+  validateResolveInvestmentTie,
   isPlayersTurn,
 } from './validators';
 import { createInitialState, registerTeam, advancePhase } from './game-engine';
@@ -29,7 +33,7 @@ function createTestState(teamCount: number = 3): GameState {
       playerId: `player-${i}`,
       isBot: false,
     })),
-    initialValuation: GAME.INITIAL_VALUATION,
+    initialCapital: GAME.INITIAL_CAPITAL,
     initialEsop: GAME.INITIAL_ESOP,
   });
 }
@@ -468,5 +472,245 @@ describe('isPlayersTurn', () => {
     state.droppedEmployees = [{ employee: makeEmployee(1), fromTeamIndex: 0 }];
     expect(isPlayersTurn(state, 0)).toBe(false);
     expect(isPlayersTurn(state, 1)).toBe(true);
+  });
+
+  it('investment declare: any team that hasnt declared yet', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    state.investmentDeclarations = { 0: 1 };
+    expect(isPlayersTurn(state, 0)).toBe(false);
+    expect(isPlayersTurn(state, 1)).toBe(true);
+  });
+
+  it('investment conflict: only competitors who havent bid yet', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    state.investmentBids = { 0: 500_000 };
+    expect(isPlayersTurn(state, 0)).toBe(false);
+    expect(isPlayersTurn(state, 1)).toBe(true);
+    expect(isPlayersTurn(state, 2)).toBe(false); // not a competitor
+  });
+
+  it('investment resolve-tie: only target owner', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'resolve-tie';
+    state.investmentTieTarget = 2;
+    expect(isPlayersTurn(state, 0)).toBe(false);
+    expect(isPlayersTurn(state, 2)).toBe(true);
+  });
+});
+
+// ===========================================
+// Investment Validators
+// ===========================================
+
+describe('validateDeclareInvestment', () => {
+  it('rejects when not in investment phase', () => {
+    const state = createTestState();
+    state.phase = 'auction';
+    expect(validateDeclareInvestment(state, 0, 1).valid).toBe(false);
+  });
+
+  it('rejects wrong sub-phase', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    expect(validateDeclareInvestment(state, 0, 1).valid).toBe(false);
+  });
+
+  it('rejects self-investment', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    expect(validateDeclareInvestment(state, 0, 0).valid).toBe(false);
+  });
+
+  it('rejects duplicate declaration', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    state.investmentDeclarations = { 0: 1 };
+    expect(validateDeclareInvestment(state, 0, 2).valid).toBe(false);
+  });
+
+  it('rejects invalid target index', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    expect(validateDeclareInvestment(state, 0, 99).valid).toBe(false);
+    expect(validateDeclareInvestment(state, 0, -1).valid).toBe(false);
+  });
+
+  it('rejects target that already has investor', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    state.teams[1].investorTeamIndex = 2;
+    expect(validateDeclareInvestment(state, 0, 1).valid).toBe(false);
+  });
+
+  it('rejects disqualified target', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    state.teams[1].isDisqualified = true;
+    expect(validateDeclareInvestment(state, 0, 1).valid).toBe(false);
+  });
+
+  it('accepts valid declaration', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    expect(validateDeclareInvestment(state, 0, 1).valid).toBe(true);
+  });
+
+  it('accepts null (pass)', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    expect(validateDeclareInvestment(state, 0, null).valid).toBe(true);
+  });
+});
+
+describe('validatePlaceInvestmentBid', () => {
+  it('rejects wrong phase', () => {
+    const state = createTestState();
+    state.phase = 'auction';
+    expect(validatePlaceInvestmentBid(state, 0, 500_000).valid).toBe(false);
+  });
+
+  it('rejects wrong sub-phase', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    expect(validatePlaceInvestmentBid(state, 0, 500_000).valid).toBe(false);
+  });
+
+  it('rejects non-competitor', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    expect(validatePlaceInvestmentBid(state, 2, 500_000).valid).toBe(false);
+  });
+
+  it('rejects already bid', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    state.investmentBids = { 0: 500_000 };
+    expect(validatePlaceInvestmentBid(state, 0, 600_000).valid).toBe(false);
+  });
+
+  it('rejects bid below minimum', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    expect(validatePlaceInvestmentBid(state, 0, 100_000).valid).toBe(false);
+  });
+
+  it('rejects bid above maximum', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    expect(validatePlaceInvestmentBid(state, 0, 2_000_000).valid).toBe(false);
+  });
+
+  it('accepts valid bid', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    expect(validatePlaceInvestmentBid(state, 0, 750_000).valid).toBe(true);
+  });
+});
+
+describe('validatePassInvestmentBid', () => {
+  it('rejects wrong sub-phase', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'declare';
+    expect(validatePassInvestmentBid(state, 0).valid).toBe(false);
+  });
+
+  it('rejects non-competitor', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    expect(validatePassInvestmentBid(state, 2).valid).toBe(false);
+  });
+
+  it('rejects already acted', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    state.investmentBids = { 0: -1 };
+    expect(validatePassInvestmentBid(state, 0).valid).toBe(false);
+  });
+
+  it('accepts valid pass', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    expect(validatePassInvestmentBid(state, 0).valid).toBe(true);
+  });
+});
+
+describe('validateResolveInvestmentTie', () => {
+  it('rejects wrong sub-phase', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    expect(validateResolveInvestmentTie(state, 2, 0).valid).toBe(false);
+  });
+
+  it('rejects non-owner', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'resolve-tie';
+    state.investmentTieTarget = 2;
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentBids = { 0: 600_000, 1: 600_000 };
+    expect(validateResolveInvestmentTie(state, 0, 1).valid).toBe(false);
+  });
+
+  it('rejects choosing non-tied team', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'resolve-tie';
+    state.investmentTieTarget = 2;
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentBids = { 0: 600_000, 1: 500_000 }; // only team 0 is at max
+    expect(validateResolveInvestmentTie(state, 2, 1).valid).toBe(false);
+  });
+
+  it('accepts valid tie resolution', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'resolve-tie';
+    state.investmentTieTarget = 2;
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentBids = { 0: 600_000, 1: 600_000 };
+    expect(validateResolveInvestmentTie(state, 2, 0).valid).toBe(true);
+    expect(validateResolveInvestmentTie(state, 2, 1).valid).toBe(true);
   });
 });

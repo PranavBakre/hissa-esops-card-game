@@ -10,6 +10,7 @@ import type {
   IdeaCard,
   WildcardChoice,
 } from '@esop-wars/shared';
+import { GAME } from '@esop-wars/shared';
 import { getSetupBonus } from './data';
 
 // ===========================================
@@ -282,8 +283,8 @@ export function decideWildcard(
 
   // Calculate team's position
   const activeTeams = state.teams.filter((t) => !t.isDisqualified);
-  const sortedByValuation = [...activeTeams].sort((a, b) => b.valuation - a.valuation);
-  const rank = sortedByValuation.findIndex((t) => t.name === team.name);
+  const sortedByCapital = [...activeTeams].sort((a, b) => b.capital - a.capital);
+  const rank = sortedByCapital.findIndex((t) => t.name === team.name);
 
   // In lead - use shield to protect
   if (rank === 0 && Math.random() < 0.6) {
@@ -326,6 +327,98 @@ export function decideSecondaryDrop(
   scored.sort((a, b) => a.score - b.score);
 
   return scored[0].id;
+}
+
+// ===========================================
+// Investment Decisions
+// ===========================================
+
+export function decideInvestmentTarget(
+  state: GameState,
+  teamIndex: number
+): number | null {
+  const team = state.teams[teamIndex];
+
+  // Already invested
+  if (team.investedInTeamIndex !== null) {
+    return null;
+  }
+
+  // Find eligible targets: other active teams without an investor
+  const eligible = state.teams
+    .map((t, i) => ({ team: t, index: i }))
+    .filter(({ team: t, index: i }) =>
+      i !== teamIndex &&
+      !t.isDisqualified &&
+      t.investorTeamIndex === null
+    );
+
+  if (eligible.length === 0) {
+    return null;
+  }
+
+  // 15% chance to pass
+  if (Math.random() < 0.15) {
+    return null;
+  }
+
+  // Pick uniformly at random
+  const choice = eligible[Math.floor(Math.random() * eligible.length)];
+  return choice.index;
+}
+
+export function decideBotMaxBid(): number {
+  // Random ceiling between 500K and 1M, snapped to 50K increments
+  const increments = Math.floor(Math.random() * 11); // 0-10 increments above 500K
+  return GAME.INVESTMENT_MIN + increments * GAME.INVESTMENT_BID_INCREMENT;
+}
+
+export function decideInvestmentBid(
+  state: GameState,
+  teamIndex: number,
+  currentHighestBid: number
+): number | null {
+  // Get bot's personal ceiling
+  const ceiling = state.investmentBotCeilings[teamIndex] ?? GAME.INVESTMENT_MIN;
+
+  // Starting bid or outbid
+  let bidAmount: number;
+  if (currentHighestBid <= 0) {
+    bidAmount = GAME.INVESTMENT_MIN;
+  } else {
+    // Escalate by 1-2 increments with 30-40% randomness
+    const baseIncrements = Math.random() < 0.5 ? 1 : 2;
+    const randomFactor = 1 + (Math.random() * 0.1 + 0.3); // 1.3-1.4
+    const increment = Math.round(baseIncrements * GAME.INVESTMENT_BID_INCREMENT * randomFactor);
+    bidAmount = currentHighestBid + increment;
+  }
+
+  // Snap to increment boundaries
+  bidAmount = Math.round(bidAmount / GAME.INVESTMENT_BID_INCREMENT) * GAME.INVESTMENT_BID_INCREMENT;
+
+  // Clamp to range
+  bidAmount = Math.max(GAME.INVESTMENT_MIN, bidAmount);
+  bidAmount = Math.min(GAME.INVESTMENT_MAX, bidAmount);
+
+  // If exceeds ceiling, drop out
+  if (bidAmount > ceiling) {
+    return null;
+  }
+
+  return bidAmount;
+}
+
+export function decideInvestmentTieResolution(
+  state: GameState,
+  targetTeamIndex: number,
+  tiedTeams: { teamIndex: number; amount: number }[]
+): number {
+  // Pick the team that bid more
+  const maxBid = Math.max(...tiedTeams.map((t) => t.amount));
+  const maxBidders = tiedTeams.filter((t) => t.amount === maxBid);
+
+  // If truly equal, pick randomly
+  return maxBidders[Math.floor(Math.random() * maxBidders.length)].teamIndex;
 }
 
 // ===========================================
