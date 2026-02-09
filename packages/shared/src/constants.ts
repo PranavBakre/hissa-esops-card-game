@@ -132,7 +132,7 @@ export const GAME = {
   MAX_TEAM_COUNT: 5,
   MIN_TEAM_COUNT: 2,
   EMPLOYEES_PER_TEAM: 3,
-  INITIAL_CAPITAL: 20_000_000,
+  INITIAL_CAPITAL: 20_000_000, // Capital = cash + valuation combined (used for both spending and scoring)
   INITIAL_ESOP: 12,
   SETUP_ROUNDS: 3,
   SETUP_INITIAL_HAND: 3,

@@ -2305,7 +2305,7 @@ const RULES_SECTIONS = [
     label: 'Glossary',
     content: `
       <p><strong>ESOP</strong> — Equity you give employees. You start with 12%.</p>
-      <p><strong>Capital</strong> — Your startup's worth and resources. Highest at exit wins Best Founder.</p>
+      <p><strong>Capital</strong> — A combination of your startup's cash and valuation. It grows from market performance, shrinks when you invest, and determines your final score. Highest at exit wins Best Founder.</p>
       <p><strong>Hard Skill</strong> — Technical ability. Directly affects capital growth.</p>
       <p><strong>Soft Skills</strong> — Interpersonal traits. Affected by market conditions.</p>
       <p><strong>Market Leader</strong> — Top 2 gainers each round get a capital bonus.</p>

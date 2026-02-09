@@ -137,6 +137,7 @@ export interface Team {
   name: string;
   color: string;
   esopRemaining: number;
+  /** Combined cash + valuation — used for both spending (investments) and scoring */
   capital: number;
   employees: HiredEmployee[];
   isComplete: boolean;
