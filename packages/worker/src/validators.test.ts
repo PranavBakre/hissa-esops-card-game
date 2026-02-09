@@ -628,6 +628,26 @@ describe('validatePlaceInvestmentBid', () => {
     expect(validatePlaceInvestmentBid(state, 0, 2_000_000).valid).toBe(false);
   });
 
+  it('rejects bid below current highest', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    state.investmentBids = { 0: 700_000 }; // team 0 already bid 700K
+    expect(validatePlaceInvestmentBid(state, 1, 600_000).valid).toBe(false);
+  });
+
+  it('accepts bid equal to current highest (creates tie)', () => {
+    const state = createTestState();
+    state.phase = 'investment';
+    state.investmentSubPhase = 'conflict';
+    state.investmentConflicts = { 2: [0, 1] };
+    state.investmentTieTarget = 2;
+    state.investmentBids = { 0: 700_000 };
+    expect(validatePlaceInvestmentBid(state, 1, 700_000).valid).toBe(true);
+  });
+
   it('accepts valid bid', () => {
     const state = createTestState();
     state.phase = 'investment';

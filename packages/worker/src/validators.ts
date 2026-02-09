@@ -355,6 +355,17 @@ export function validatePlaceInvestmentBid(
     return { valid: false, error: 'Already placed bid or passed' };
   }
 
+  // Find current highest bid
+  const currentBids = competitors
+    .filter((idx) => state.investmentBids[idx] > 0)
+    .map((idx) => state.investmentBids[idx]);
+  const currentHighest = currentBids.length > 0 ? Math.max(...currentBids) : 0;
+
+  // Bid must be >= current highest (equal creates a tie)
+  if (currentHighest > 0 && amount < currentHighest) {
+    return { valid: false, error: `Bid must be at least $${currentHighest.toLocaleString()} to match or exceed current highest` };
+  }
+
   if (amount < GAME.INVESTMENT_MIN) {
     return { valid: false, error: `Bid must be at least $${GAME.INVESTMENT_MIN.toLocaleString()}` };
   }
