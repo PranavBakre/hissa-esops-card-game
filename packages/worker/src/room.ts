@@ -901,15 +901,15 @@ export class GameRoom {
     // Apply wildcards (marks which teams used wildcards, exits wildcard phase)
     this.roomState.gameState = applyWildcards(this.roomState.gameState);
 
-    // Apply wildcard modifiers to this round's results
-    this.roomState.gameState = applyWildcardModifiers(this.roomState.gameState);
-
-    // Log wildcard choices
+    // Log wildcard choices (must happen before applyWildcardModifiers clears them)
     this.roomState.gameState.teams.forEach((t, i) => {
       if (t.wildcardActiveThisRound && t.wildcardActiveThisRound !== 'pass') {
         this.logDecision(i, `played wildcard: ${t.wildcardActiveThisRound}`);
       }
     });
+
+    // Apply wildcard modifiers to this round's results
+    this.roomState.gameState = applyWildcardModifiers(this.roomState.gameState);
 
     // Broadcast wildcard reveals
     this.broadcast({
