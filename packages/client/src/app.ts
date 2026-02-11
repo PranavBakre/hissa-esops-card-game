@@ -415,6 +415,54 @@ function handleMessage(msg: ServerMessage): void {
       }
       break;
 
+    case 'investment-declared': {
+      if (state.gameState) {
+        const team = state.gameState.teams[msg.teamIndex];
+        showToast(`${team.name} submitted investment decision`, 'success');
+      }
+      break;
+    }
+
+    case 'investment-conflict':
+      if (state.gameState) {
+        const target = state.gameState.teams[msg.targetTeamIndex];
+        showToast(`Bidding war for ${target.name}!`, 'warning');
+      }
+      break;
+
+    case 'investment-bid-placed':
+      if (state.gameState) {
+        const bidder = state.gameState.teams[msg.teamIndex];
+        showToast(`${bidder.name} bids $${(msg.amount / 1000).toFixed(0)}K`, 'success');
+      }
+      break;
+
+    case 'investment-bid-passed':
+      if (state.gameState) {
+        const passer = state.gameState.teams[msg.teamIndex];
+        showToast(`${passer.name} drops out of bidding`, 'warning');
+      }
+      break;
+
+    case 'investment-resolved':
+      if (state.gameState) {
+        msg.investments.forEach((inv) => {
+          const investor = state.gameState?.teams[inv.investor];
+          const target = state.gameState?.teams[inv.target];
+          if (investor && target) {
+            showToast(`${investor.name} invests $${(inv.amount / 1000).toFixed(0)}K in ${target.name}`, 'success');
+          }
+        });
+      }
+      break;
+
+    case 'investment-tie':
+      if (state.gameState) {
+        const target = state.gameState.teams[msg.targetTeamIndex];
+        showToast(`Tie for ${target.name}! Owner must decide.`, 'warning');
+      }
+      break;
+
     case 'error':
       showToast(msg.message, 'error');
       break;
@@ -538,6 +586,23 @@ export function drawMarket(): void {
 // Secondary Auction Actions
 export function dropEmployeeAction(employeeId: number): void {
   send({ type: 'drop-employee', employeeId });
+}
+
+// Investment Actions
+export function declareInvestment(targetTeamIndex: number | null): void {
+  send({ type: 'declare-investment', targetTeamIndex });
+}
+
+export function placeInvestmentBid(amount: number): void {
+  send({ type: 'place-investment-bid', amount });
+}
+
+export function passInvestmentBid(): void {
+  send({ type: 'pass-investment-bid' });
+}
+
+export function resolveInvestmentTie(chosenTeamIndex: number): void {
+  send({ type: 'resolve-investment-tie', chosenTeamIndex });
 }
 
 // Exit Actions

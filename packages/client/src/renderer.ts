@@ -27,7 +27,17 @@ import {
   dropEmployeeAction,
   drawExit,
   toggleFillBots,
+  declareInvestment,
+  placeInvestmentBid,
+  passInvestmentBid,
+  resolveInvestmentTie,
 } from './app';
+
+// ===========================================
+// UI State
+// ===========================================
+
+let decisionLogOpen = false;
 
 // ===========================================
 // Phase Intro Banner State
@@ -57,15 +67,20 @@ const PHASE_INTRO_TEXT: Partial<Record<Phase, { icon: string; title: string; des
     title: 'Auction',
     desc: 'Bid ESOP equity to hire employees. Higher skills = bigger market impact, but ESOP is limited.',
   },
+  investment: {
+    icon: '&#128176;',
+    title: 'Investment Round',
+    desc: 'Invest capital in other teams for 5% equity. If multiple teams target the same startup, a bidding war begins!',
+  },
   seed: {
     icon: '&#127793;',
     title: 'Seed Round',
-    desc: 'Market conditions are revealed. Your employees\' skills determine how your valuation changes.',
+    desc: 'Market conditions are revealed. Your employees\' skills determine how your capital changes.',
   },
   early: {
     icon: '&#128200;',
     title: 'Early Stage',
-    desc: 'Market conditions are revealed. Your employees\' skills determine how your valuation changes.',
+    desc: 'Market conditions are revealed. Your employees\' skills determine how your capital changes.',
   },
   'secondary-drop': {
     icon: '&#128100;',
@@ -80,7 +95,7 @@ const PHASE_INTRO_TEXT: Partial<Record<Phase, { icon: string; title: string; des
   mature: {
     icon: '&#127942;',
     title: 'Mature Stage',
-    desc: 'Market conditions are revealed. Your employees\' skills determine how your valuation changes.',
+    desc: 'Market conditions are revealed. Your employees\' skills determine how your capital changes.',
   },
   exit: {
     icon: '&#127922;',
@@ -366,6 +381,9 @@ function renderGame(app: HTMLElement): void {
     case 'auction-summary':
       content = renderAuctionSummary();
       break;
+    case 'investment':
+      content = renderInvestment();
+      break;
     case 'seed':
     case 'early':
     case 'mature':
@@ -398,6 +416,7 @@ function renderGame(app: HTMLElement): void {
           ${content}
         </div>
       </div>
+      ${renderDecisionLog()}
     </div>
   `;
 
@@ -426,6 +445,31 @@ function renderGame(app: HTMLElement): void {
     const banner = document.getElementById('phase-intro-banner');
     if (banner) {
       banner.style.display = 'none';
+    }
+  });
+
+  // Log button listener
+  document.getElementById('log-btn')?.addEventListener('click', () => {
+    decisionLogOpen = !decisionLogOpen;
+    const panel = document.getElementById('decision-log-panel');
+    if (panel) {
+      panel.classList.toggle('open', decisionLogOpen);
+      // Auto-scroll to bottom when opening
+      if (decisionLogOpen) {
+        const logBody = panel.querySelector('.log-body');
+        if (logBody) {
+          logBody.scrollTop = logBody.scrollHeight;
+        }
+      }
+    }
+  });
+
+  // Close log panel
+  document.getElementById('close-log-btn')?.addEventListener('click', () => {
+    decisionLogOpen = false;
+    const panel = document.getElementById('decision-log-panel');
+    if (panel) {
+      panel.classList.remove('open');
     }
   });
 
@@ -481,6 +525,7 @@ function renderPhaseBar(): string {
             <button class="btn-speed ${state.gameSpeed === 'instant' ? 'active' : ''}" data-speed="instant">Instant</button>
           </div>
         ` : ''}
+        <button class="btn-rules" id="log-btn" title="Decision Log">&#128220;</button>
         <button class="btn-rules" id="rules-btn" title="Rules">?</button>
       </div>
     </div>
@@ -530,7 +575,7 @@ function renderTeamsSidebar(): string {
               ${isMe ? '<span class="badge badge-you">You</span>' : ''}
               ${team.isBot ? '<span class="badge badge-bot">Bot</span>' : ''}
             </div>
-            <div class="sidebar-valuation">${formatCurrency(team.valuation)}</div>
+            <div class="sidebar-valuation">${formatCurrency(team.capital)}</div>
             <div class="sidebar-meta">
               <span>${team.esopRemaining.toFixed(1)}% ESOP</span>
               <span>${team.employees.length}/3 hired</span>
@@ -539,6 +584,10 @@ function renderTeamsSidebar(): string {
             ${!team.wildcardUsed
               ? '<div class="sidebar-wildcard">&#9733; Wildcard ready</div>'
               : '<div class="sidebar-wildcard used">&#9733; Wildcard used</div>'
+            }
+            ${team.investorTeamIndex !== null
+              ? `<div class="sidebar-investor">Investor: ${state.gameState?.teams[team.investorTeamIndex]?.name ?? '?'}</div>`
+              : ''
             }
           </div>
         `;
@@ -594,11 +643,54 @@ function renderMobileTeamStrip(): string {
         return `
           <div class="mobile-team-chip ${isMe ? 'my-team' : ''}" style="--team-color: ${team.color}">
             <span class="mobile-team-chip-name">${team.name}</span>
-            <span class="mobile-team-chip-val">${formatCurrency(team.valuation)}</span>
+            <span class="mobile-team-chip-val">${formatCurrency(team.capital)}</span>
             ${isMe ? '<span class="badge badge-you">You</span>' : ''}
           </div>
         `;
       }).join('')}
+    </div>
+  `;
+}
+
+// ===========================================
+// Decision Log Panel
+// ===========================================
+
+function renderDecisionLog(): string {
+  if (!state.gameState) return '';
+
+  const entries = state.gameState.decisionLog;
+
+  return `
+    <div class="decision-log-panel ${decisionLogOpen ? 'open' : ''}" id="decision-log-panel">
+      <div class="log-header">
+        <span class="log-title">Decision Log</span>
+        <button class="log-close" id="close-log-btn">&times;</button>
+      </div>
+      <div class="log-body">
+        ${entries.length === 0
+          ? '<div class="log-empty">No decisions yet.</div>'
+          : entries.map((entry) => {
+              const teamName = entry.teamIndex !== null
+                ? state.gameState?.teams[entry.teamIndex]?.name ?? '?'
+                : null;
+              const teamColor = entry.teamIndex !== null
+                ? state.gameState?.teams[entry.teamIndex]?.color ?? 'var(--text-muted)'
+                : null;
+              const phaseLabel = PHASE_LABELS[entry.phase] ?? entry.phase;
+              return `
+                <div class="log-entry">
+                  <span class="log-phase">${phaseLabel}</span>
+                  ${teamName
+                    ? `<span class="log-team" style="color: ${teamColor}">${teamName}</span>`
+                    : ''
+                  }
+                  <span class="log-message">${entry.message}</span>
+                </div>
+              `;
+            }).join('')
+        }
+      </div>
     </div>
   `;
 }
@@ -680,13 +772,43 @@ function getSecondaryHireHint(): string {
   return `Outbid <strong>${bidderName}</strong> or pass. You have <strong>${myTeam.esopRemaining.toFixed(1)}%</strong> ESOP remaining.`;
 }
 
+function getInvestmentHint(): string {
+  if (!state.gameState) return '';
+  const subPhase = state.gameState.investmentSubPhase;
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+
+  if (!myTeam) return 'Watch teams make investment decisions.';
+
+  if (subPhase === 'declare') {
+    const hasDeclared = state.myTeamIndex !== null &&
+      state.gameState.investmentDeclarations[state.myTeamIndex] !== undefined;
+    if (hasDeclared) return 'Investment declared. Waiting for other teams...';
+    if (myTeam.investedInTeamIndex !== null) return 'You\'ve already invested. Waiting for others...';
+    return 'Choose a team to invest in, or pass. Investing costs capital but earns 5% equity.';
+  }
+
+  if (subPhase === 'conflict') {
+    return 'Multiple teams want the same target! Bid to win the investment rights.';
+  }
+
+  if (subPhase === 'resolve-tie') {
+    const tieTarget = state.gameState.investmentTieTarget;
+    if (tieTarget === state.myTeamIndex) {
+      return 'You own the target company. Choose which investor to accept!';
+    }
+    return 'Waiting for the target company owner to break the tie...';
+  }
+
+  return 'Review investment results.';
+}
+
 function getExitHint(): string {
   if (!state.gameState) return '';
   const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
   const isMyTurn = state.myTeamIndex !== null && state.gameState.currentExitTurn === state.myTeamIndex;
 
   if (myTeam?.exitChoice) {
-    return `You drew <strong>${myTeam.exitChoice.name}</strong>! ${myTeam.exitChoice.multiplier}x multiplier applied to your valuation.`;
+    return `You drew <strong>${myTeam.exitChoice.name}</strong>! ${myTeam.exitChoice.multiplier}x multiplier applied to your capital.`;
   }
   if (isMyTurn) {
     return 'It\'s your turn! Click to draw your exit card. Good luck!';
@@ -1080,6 +1202,320 @@ function renderAuctionSummary(): string {
       ` : state.isHost ? `
         <div class="summary-actions">
           <button class="btn btn-primary btn-large" id="advance-phase-btn">
+            Continue to Investment
+          </button>
+        </div>
+      ` : `
+        <p class="summary-note">Waiting for host to continue...</p>
+      `}
+    </div>
+  `;
+}
+
+// ===========================================
+// Investment Phase
+// ===========================================
+
+function renderInvestment(): string {
+  if (!state.gameState) return '';
+
+  const subPhase = state.gameState.investmentSubPhase;
+
+  switch (subPhase) {
+    case 'declare':
+      return renderInvestmentDeclare();
+    case 'conflict':
+      return renderInvestmentConflict();
+    case 'resolve-tie':
+      return renderInvestmentTie();
+    case 'summary':
+      return renderInvestmentSummary();
+    default:
+      return '<p>Unknown investment sub-phase</p>';
+  }
+}
+
+function renderInvestmentDeclare(): string {
+  if (!state.gameState) return '';
+
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+  const hasDeclared = state.myTeamIndex !== null &&
+    state.gameState.investmentDeclarations[state.myTeamIndex] !== undefined;
+
+  // Find eligible targets for the current player
+  const eligibleTargets = state.gameState.teams
+    .map((team, i) => ({ team, index: i }))
+    .filter(({ team, index }) =>
+      index !== state.myTeamIndex &&
+      !team.isDisqualified &&
+      team.investorTeamIndex === null
+    );
+
+  return `
+    <div class="investment-phase">
+      <h2>Investment Round</h2>
+      <p class="action-hint">${getInvestmentHint()}</p>
+
+      ${myTeam && !myTeam.isDisqualified && !hasDeclared && myTeam.investedInTeamIndex === null ? `
+        <div class="investment-declare">
+          <h3>Choose a Team to Invest In</h3>
+          <p class="investment-info">Invest $500K\u2013$1M capital for 5% equity in another team.</p>
+          <div class="investment-targets">
+            ${eligibleTargets.map(({ team, index }) => `
+              <div class="investment-target-card" data-target-index="${index}" style="--team-color: ${team.color}">
+                <div class="target-name">${team.name}</div>
+                <div class="target-capital">${formatCurrency(team.capital)}</div>
+                <div class="target-employees">${team.employees.length}/3 employees</div>
+              </div>
+            `).join('')}
+          </div>
+          <button class="btn btn-secondary" id="pass-investment-btn">
+            Pass (Don't Invest)
+          </button>
+        </div>
+      ` : myTeam && !myTeam.isDisqualified && hasDeclared ? `
+        <div class="investment-waiting">
+          <h3>Declaration Submitted</h3>
+          <p>Waiting for other teams to decide...</p>
+        </div>
+      ` : '<p>You are spectating or disqualified.</p>'}
+
+      <div class="investment-status">
+        <h3>Declaration Status</h3>
+        ${state.gameState.teams.map((team, i) => {
+          const declared = state.gameState?.investmentDeclarations[i] !== undefined;
+          return team.isDisqualified ? '' : `
+            <div class="investment-status-item ${declared ? 'declared' : 'pending'}">
+              <span class="team-dot" style="background: ${team.color}"></span>
+              <span>${team.name}</span>
+              <span class="status">${declared ? 'Declared' : 'Deciding...'}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderInvestmentConflict(): string {
+  if (!state.gameState) return '';
+
+  const conflicts = state.gameState.investmentConflicts;
+  const conflictEntries = Object.entries(conflicts);
+
+  if (conflictEntries.length === 0) {
+    return '<div class="investment-phase"><p>Resolving conflicts...</p></div>';
+  }
+
+  // Show the first unresolved conflict
+  const [targetStr, competitors] = conflictEntries[0];
+  const targetIndex = parseInt(targetStr, 10);
+  const targetTeam = state.gameState.teams[targetIndex];
+  const myTeam = state.myTeamIndex !== null ? state.gameState.teams[state.myTeamIndex] : null;
+  const isCompetitor = state.myTeamIndex !== null && competitors.includes(state.myTeamIndex);
+  const hasBid = state.myTeamIndex !== null &&
+    state.gameState.investmentBids[state.myTeamIndex] !== undefined;
+
+  // Find current highest bid
+  const bids = state.gameState.investmentBids;
+  let highestBid = 0;
+  let highestBidder = '';
+  for (const comp of competitors) {
+    const bidAmount = bids[comp];
+    if (bidAmount !== undefined && bidAmount > highestBid) {
+      highestBid = bidAmount;
+      highestBidder = state.gameState.teams[comp].name;
+    }
+  }
+
+  return `
+    <div class="investment-phase">
+      <h2>Investment Conflict</h2>
+      <p class="action-hint">${getInvestmentHint()}</p>
+
+      <div class="conflict-target" style="--team-color: ${targetTeam.color}">
+        <div class="conflict-label">Bidding for investment in:</div>
+        <div class="conflict-team-name">${targetTeam.name}</div>
+        <div class="conflict-team-capital">${formatCurrency(targetTeam.capital)}</div>
+      </div>
+
+      <div class="conflict-competitors">
+        <h3>Competitors</h3>
+        ${competitors.map((comp) => {
+          const team = state.gameState?.teams[comp];
+          if (!team) return '';
+          const bid = state.gameState?.investmentBids[comp];
+          return `
+            <div class="competitor-row" style="--team-color: ${team.color}">
+              <span class="team-dot" style="background: ${team.color}"></span>
+              <span class="competitor-name">${team.name}</span>
+              <span class="competitor-bid">${bid !== undefined ? `$${(bid / 1000).toFixed(0)}K` : 'Deciding...'}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      ${highestBid > 0 ? `
+        <div class="bid-status">
+          <div class="current-bid">
+            <span>Highest Bid:</span>
+            <strong>$${(highestBid / 1000).toFixed(0)}K</strong>
+            <span>by ${highestBidder}</span>
+          </div>
+        </div>
+      ` : ''}
+
+      ${isCompetitor && !hasBid ? `
+        <div class="investment-bid-controls">
+          <div class="bid-input-wrap">
+            <span class="prefix">$</span>
+            <input type="number" id="investment-bid-amount"
+              value="${Math.max(GAME.INVESTMENT_MIN, highestBid + GAME.INVESTMENT_BID_INCREMENT)}"
+              min="${Math.max(GAME.INVESTMENT_MIN, highestBid)}"
+              max="${GAME.INVESTMENT_MAX}"
+              step="${GAME.INVESTMENT_BID_INCREMENT}"
+              data-min-bid="${Math.max(GAME.INVESTMENT_MIN, highestBid)}">
+            <span class="suffix">capital</span>
+          </div>
+          <div class="bid-actions">
+            <button class="btn btn-primary" id="place-investment-bid-btn">Place Bid</button>
+            <button class="btn btn-secondary" id="pass-investment-bid-btn">Drop Out</button>
+          </div>
+        </div>
+      ` : isCompetitor ? `
+        <div class="investment-waiting">
+          <p>Bid submitted. Waiting for others...</p>
+        </div>
+      ` : myTeam ? `
+        <div class="investment-waiting">
+          <p>Watching the bidding war...</p>
+        </div>
+      ` : '<p>You are spectating.</p>'}
+    </div>
+  `;
+}
+
+function renderInvestmentTie(): string {
+  if (!state.gameState) return '';
+
+  const tieTarget = state.gameState.investmentTieTarget;
+  if (tieTarget === null) return '<div class="investment-phase"><p>Resolving tie...</p></div>';
+
+  const targetTeam = state.gameState.teams[tieTarget];
+  const isOwner = state.myTeamIndex === tieTarget;
+
+  // Get tied teams from the conflict data
+  const competitors = state.gameState.investmentConflicts[tieTarget] ?? [];
+  const bids = state.gameState.investmentBids;
+
+  // Find the tie amount (highest bid amount)
+  let tieAmount = 0;
+  for (const comp of competitors) {
+    const bid = bids[comp];
+    if (bid !== undefined && bid > tieAmount) {
+      tieAmount = bid;
+    }
+  }
+
+  const tiedTeams = competitors.filter((comp) => bids[comp] === tieAmount);
+
+  return `
+    <div class="investment-phase">
+      <h2>Investment Tie</h2>
+      <p class="action-hint">${getInvestmentHint()}</p>
+
+      <div class="conflict-target" style="--team-color: ${targetTeam.color}">
+        <div class="conflict-label">Tie for investment in:</div>
+        <div class="conflict-team-name">${targetTeam.name}</div>
+        <div class="tie-amount">Both bid $${(tieAmount / 1000).toFixed(0)}K</div>
+      </div>
+
+      ${isOwner ? `
+        <div class="tie-resolution">
+          <h3>Choose Your Investor</h3>
+          <p>As the target company owner, you decide who gets to invest.</p>
+          <div class="tie-options">
+            ${tiedTeams.map((comp) => {
+              const team = state.gameState?.teams[comp];
+              if (!team) return '';
+              return `
+                <div class="tie-option-card" data-team-index="${comp}" style="--team-color: ${team.color}">
+                  <div class="tie-option-name">${team.name}</div>
+                  <div class="tie-option-capital">${formatCurrency(team.capital)}</div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : `
+        <div class="investment-waiting">
+          <p>Waiting for ${targetTeam.name}'s owner to break the tie...</p>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function renderInvestmentSummary(): string {
+  if (!state.gameState) return '';
+
+  // Gather investment results
+  const investments = state.gameState.teams
+    .map((team, i) => ({ team, index: i }))
+    .filter(({ team }) => team.investedInTeamIndex !== null);
+
+  return `
+    <div class="investment-phase">
+      <h2>Investment Summary</h2>
+      <p class="action-hint">Review the investment results.</p>
+
+      ${investments.length > 0 ? `
+        <div class="investment-results">
+          ${investments.map(({ team, index }) => {
+            const target = team.investedInTeamIndex !== null
+              ? state.gameState?.teams[team.investedInTeamIndex]
+              : null;
+            if (!target) return '';
+            return `
+              <div class="investment-result-card">
+                <div class="investment-arrow">
+                  <span class="investor-name" style="color: ${team.color}">${team.name}</span>
+                  <span class="arrow-icon">&#8594;</span>
+                  <span class="target-name" style="color: ${target.color}">${target.name}</span>
+                </div>
+                <div class="investment-detail">
+                  $${(team.investmentAmount / 1000).toFixed(0)}K for 5% equity
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      ` : `
+        <div class="no-investments">
+          <p>No investments were made this round.</p>
+        </div>
+      `}
+
+      <div class="summary-grid">
+        ${state.gameState.teams.map((team) => `
+          <div class="team-summary" style="--team-color: ${team.color}">
+            <div class="team-header">${team.name}</div>
+            <div class="sidebar-valuation">${formatCurrency(team.capital)}</div>
+            ${team.investedInTeamIndex !== null ? `
+              <div class="investment-badge investor">Invested in ${state.gameState?.teams[team.investedInTeamIndex]?.name}</div>
+            ` : ''}
+            ${team.investorTeamIndex !== null ? `
+              <div class="investment-badge target">Funded by ${state.gameState?.teams[team.investorTeamIndex]?.name}</div>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+
+      ${state.spectatorMode ? `
+        <p class="summary-note">Auto-advancing...</p>
+      ` : state.isHost ? `
+        <div class="summary-actions">
+          <button class="btn btn-primary btn-large" id="advance-phase-btn">
             Start Market Rounds
           </button>
         </div>
@@ -1156,7 +1592,7 @@ function renderMarketRound(): string {
                   <div class="result-change ${perf.gain >= 0 ? 'positive' : 'negative'}">
                     ${perf.gain >= 0 ? '+' : ''}${formatCurrency(perf.gain)}
                   </div>
-                  <div class="result-val">${formatCurrency(team.valuation)}</div>
+                  <div class="result-val">${formatCurrency(team.capital)}</div>
                   ${team.isMarketLeader ? '<span class="leader-badge">Market Leader</span>' : ''}
                 </div>
               `;
@@ -1453,22 +1889,60 @@ function renderWinner(): string {
 
   const teams = [...state.gameState.teams]
     .filter((t) => !t.isDisqualified)
-    .sort((a, b) => b.valuation - a.valuation);
+    .sort((a, b) => b.capital - a.capital);
 
-  // Best Founder: Highest valuation
+  // Best Founder: Highest capital
   const founder = teams[0];
 
-  // Best Employer: Highest (ESOP% given to employees) x valuation
+  // Best Employer: Highest (ESOP% given to employees) x capital
   const employer = teams.reduce((best, team) => {
     const teamEsop = team.employees.reduce((sum, e) => sum + e.bidAmount, 0);
     const bestEsop = best.employees.reduce((sum, e) => sum + e.bidAmount, 0);
-    const teamScore = (teamEsop / GAME.INITIAL_ESOP) * team.valuation;
-    const bestScore = (bestEsop / GAME.INITIAL_ESOP) * best.valuation;
+    const teamScore = (teamEsop / GAME.INITIAL_ESOP) * team.capital;
+    const bestScore = (bestEsop / GAME.INITIAL_ESOP) * best.capital;
     return teamScore > bestScore ? team : best;
   });
 
   const employerEsop = employer.employees.reduce((sum, e) => sum + e.bidAmount, 0);
-  const employerScore = (employerEsop / GAME.INITIAL_ESOP) * employer.valuation;
+  const employerScore = (employerEsop / GAME.INITIAL_ESOP) * employer.capital;
+
+  // Best Investor: Highest return multiple
+  const investors = state.gameState.teams.filter(
+    (t) => !t.isDisqualified && t.investedInTeamIndex !== null && t.investmentAmount > 0
+  );
+  let investorCard = '';
+  if (investors.length > 0) {
+    const bestInvestor = investors.reduce((best, team) => {
+      const targetCapital = team.investedInTeamIndex !== null
+        ? state.gameState?.teams[team.investedInTeamIndex]?.capital ?? 0
+        : 0;
+      const returnMult = (GAME.INVESTOR_EQUITY * targetCapital) / team.investmentAmount;
+
+      const bestTargetCapital = best.investedInTeamIndex !== null
+        ? state.gameState?.teams[best.investedInTeamIndex]?.capital ?? 0
+        : 0;
+      const bestReturnMult = (GAME.INVESTOR_EQUITY * bestTargetCapital) / best.investmentAmount;
+
+      return returnMult > bestReturnMult ? team : best;
+    });
+
+    const bestTargetCapital = bestInvestor.investedInTeamIndex !== null
+      ? state.gameState.teams[bestInvestor.investedInTeamIndex]?.capital ?? 0
+      : 0;
+    const bestReturn = (GAME.INVESTOR_EQUITY * bestTargetCapital) / bestInvestor.investmentAmount;
+    const targetName = bestInvestor.investedInTeamIndex !== null
+      ? state.gameState.teams[bestInvestor.investedInTeamIndex]?.name ?? '?'
+      : '?';
+
+    investorCard = `
+      <div class="winner-card investor">
+        <div class="winner-card-label">Best Investor</div>
+        <div class="winner-card-team" style="color: ${bestInvestor.color}">${bestInvestor.name}</div>
+        <div class="winner-card-stat">${bestReturn.toFixed(2)}x return</div>
+        <div class="winner-card-desc">$${(bestInvestor.investmentAmount / 1000).toFixed(0)}K invested in ${targetName}</div>
+      </div>
+    `;
+  }
 
   return `
     <div class="winner-phase">
@@ -1479,16 +1953,18 @@ function renderWinner(): string {
           <div class="winner-card founder">
             <div class="winner-card-label">Best Founder</div>
             <div class="winner-card-team" style="color: ${founder.color}">${founder.name}</div>
-            <div class="winner-card-stat">${formatCurrency(founder.valuation)}</div>
-            <div class="winner-card-desc">Highest final valuation</div>
+            <div class="winner-card-stat">${formatCurrency(founder.capital)}</div>
+            <div class="winner-card-desc">Highest final capital</div>
           </div>
 
           <div class="winner-card employer">
             <div class="winner-card-label">Best Employer</div>
             <div class="winner-card-team" style="color: ${employer.color}">${employer.name}</div>
             <div class="winner-card-stat">${formatCurrency(employerScore)}</div>
-            <div class="winner-card-desc">${employerEsop} ESOP given, ${formatCurrency(employer.valuation)} valuation</div>
+            <div class="winner-card-desc">${employerEsop} ESOP given, ${formatCurrency(employer.capital)} capital</div>
           </div>
+
+          ${investorCard}
         </div>
 
         <div class="standings">
@@ -1498,7 +1974,7 @@ function renderWinner(): string {
               <span class="standing-rank">#${index + 1}</span>
               <span class="standing-dot" style="background: ${team.color}"></span>
               <span class="standing-name">${team.name}</span>
-              <span class="standing-val">${formatCurrency(team.valuation)}</span>
+              <span class="standing-val">${formatCurrency(team.capital)}</span>
             </div>
           `).join('')}
         </div>
@@ -1537,6 +2013,9 @@ function attachPhaseEventListeners(phase: Phase): void {
     case 'auction':
       attachAuctionListeners();
       break;
+    case 'investment':
+      attachInvestmentListeners();
+      break;
     case 'seed':
     case 'early':
     case 'mature':
@@ -1563,6 +2042,60 @@ function attachSummaryListeners(): void {
   document.getElementById('advance-phase-btn')?.addEventListener('click', () => {
     advancePhase();
   });
+}
+
+function attachInvestmentListeners(): void {
+  const subPhase = state.gameState?.investmentSubPhase;
+
+  if (subPhase === 'declare') {
+    // Target selection cards
+    document.querySelectorAll('.investment-target-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const targetIndex = card.getAttribute('data-target-index');
+        if (targetIndex !== null) {
+          declareInvestment(parseInt(targetIndex, 10));
+        }
+      });
+    });
+
+    // Pass button
+    document.getElementById('pass-investment-btn')?.addEventListener('click', () => {
+      declareInvestment(null);
+    });
+  }
+
+  if (subPhase === 'conflict') {
+    const bidInput = getInputById('investment-bid-amount');
+
+    document.getElementById('place-investment-bid-btn')?.addEventListener('click', () => {
+      if (bidInput) {
+        const amount = parseInt(bidInput.value, 10);
+        const minBid = parseInt(bidInput.dataset.minBid ?? String(GAME.INVESTMENT_MIN), 10);
+        if (!isNaN(amount) && amount >= minBid && amount <= GAME.INVESTMENT_MAX) {
+          placeInvestmentBid(amount);
+        }
+      }
+    });
+
+    document.getElementById('pass-investment-bid-btn')?.addEventListener('click', () => {
+      passInvestmentBid();
+    });
+  }
+
+  if (subPhase === 'resolve-tie') {
+    document.querySelectorAll('.tie-option-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const teamIndex = card.getAttribute('data-team-index');
+        if (teamIndex !== null) {
+          resolveInvestmentTie(parseInt(teamIndex, 10));
+        }
+      });
+    });
+  }
+
+  if (subPhase === 'summary') {
+    attachSummaryListeners();
+  }
 }
 
 function attachRegistrationListeners(): void {
@@ -1763,8 +2296,8 @@ const RULES_SECTIONS = [
       <h3>What is ESOP Wars?</h3>
       <p>5 teams compete to build the highest-valued startup. You'll draft your identity, hire employees by bidding equity (ESOP), survive market rounds, and draw your exit card.</p>
       <h3>How to Win</h3>
-      <p><strong>Best Founder</strong> — Highest final valuation after exit multiplier.</p>
-      <p><strong>Best Employer</strong> — Highest ESOP% given to employees multiplied by valuation.</p>
+      <p><strong>Best Founder</strong> — Highest final capital after exit multiplier.</p>
+      <p><strong>Best Employer</strong> — Highest ESOP% given to employees multiplied by capital.</p>
       <h3>Game Flow</h3>
       <p>Registration → Setup Drafting → Auction → Seed Round → Early Stage → Secondary Market → Mature Stage → Exit → Winner</p>
     `,
@@ -1788,8 +2321,22 @@ const RULES_SECTIONS = [
       <h3>Limits</h3>
       <p>Each team hires up to <strong>3 employees</strong>. Teams with 0 employees are <strong>disqualified</strong>.</p>
       <h3>Employee Stats</h3>
-      <p><strong>Hard Skill</strong> — Directly impacts valuation each market round.</p>
+      <p><strong>Hard Skill</strong> — Directly impacts capital each market round.</p>
       <p><strong>Soft Skills</strong> — Can be boosted or penalized by market card conditions.</p>
+    `,
+  },
+  {
+    id: 'investment',
+    label: 'Invest',
+    content: `
+      <h3>How It Works</h3>
+      <p>After the auction, each team can invest capital in another team for <strong>5% equity</strong>.</p>
+      <h3>Declaration</h3>
+      <p>All teams simultaneously choose a target or pass. If multiple teams target the same startup, a <strong>bidding war</strong> begins.</p>
+      <h3>Bidding Wars</h3>
+      <p>Competing investors bid between <strong>$500K\u2013$1M</strong> (in $50K increments). Highest bidder wins. Ties are broken by the target company's owner.</p>
+      <h3>Returns</h3>
+      <p>At the end of the game, your return multiple is: <strong>(5% \u00d7 target's final capital) / investment amount</strong>.</p>
     `,
   },
   {
@@ -1797,9 +2344,9 @@ const RULES_SECTIONS = [
     label: 'Market',
     content: `
       <h3>How It Works</h3>
-      <p>A market card is drawn revealing conditions that affect different employee categories. Your employees' skills determine your valuation change.</p>
+      <p>A market card is drawn revealing conditions that affect different employee categories. Your employees' skills determine your capital change.</p>
       <h3>Market Leader</h3>
-      <p>The <strong>top 2 gainers</strong> each round receive a bonus valuation bump.</p>
+      <p>The <strong>top 2 gainers</strong> each round receive a bonus capital bump.</p>
       <h3>Wildcards</h3>
       <p>After seeing round results, each team can play their <strong>one-time</strong> wildcard:</p>
       <p><strong>Double Down</strong> — 2x your gains or losses this round.</p>
@@ -1824,11 +2371,11 @@ const RULES_SECTIONS = [
       <h3>Drawing</h3>
       <p>Teams take turns drawing from a shuffled exit deck. Your card is <strong>random</strong> — no choosing.</p>
       <h3>Exit Cards</h3>
-      <p><strong>IPO (2.0x)</strong> — Best outcome. Double your valuation.</p>
+      <p><strong>IPO (2.0x)</strong> — Best outcome. Double your capital.</p>
       <p><strong>Acquisition (1.5x)</strong> — Strong exit. 50% boost.</p>
-      <p><strong>Merger (1.0x)</strong> — Neutral. Keep your valuation.</p>
+      <p><strong>Merger (1.0x)</strong> — Neutral. Keep your capital.</p>
       <p><strong>Downround (0.75x)</strong> — Rough exit. 25% loss.</p>
-      <p><strong>Fire Sale (0.5x)</strong> — Worst outcome. Half your valuation.</p>
+      <p><strong>Fire Sale (0.5x)</strong> — Worst outcome. Half your capital.</p>
     `,
   },
   {
@@ -1836,13 +2383,13 @@ const RULES_SECTIONS = [
     label: 'Glossary',
     content: `
       <p><strong>ESOP</strong> — Equity you give employees. You start with 12%.</p>
-      <p><strong>Valuation</strong> — Your startup's worth. Highest at exit wins Best Founder.</p>
-      <p><strong>Hard Skill</strong> — Technical ability. Directly affects valuation growth.</p>
+      <p><strong>Capital</strong> — A combination of your startup's cash and valuation. It grows from market performance, shrinks when you invest, and determines your final score. Highest at exit wins Best Founder.</p>
+      <p><strong>Hard Skill</strong> — Technical ability. Directly affects capital growth.</p>
       <p><strong>Soft Skills</strong> — Interpersonal traits. Affected by market conditions.</p>
-      <p><strong>Market Leader</strong> — Top 2 gainers each round get a valuation bonus.</p>
+      <p><strong>Market Leader</strong> — Top 2 gainers each round get a capital bonus.</p>
       <p><strong>Setup Bonus</strong> — Matching segment + idea pairs unlock a category multiplier.</p>
       <p><strong>Wildcard</strong> — One-time ability: Double Down or Shield.</p>
-      <p><strong>Exit Multiplier</strong> — Applied to your final valuation. IPO (2x) best, Fire Sale (0.5x) worst.</p>
+      <p><strong>Exit Multiplier</strong> — Applied to your final capital. IPO (2x) best, Fire Sale (0.5x) worst.</p>
     `,
   },
 ];
@@ -1852,6 +2399,7 @@ function getPhaseRulesSection(): string {
   const phase = state.gameState.phase;
   if (phase === 'setup' || phase === 'setup-lock' || phase === 'setup-summary') return 'setup';
   if (phase === 'auction' || phase === 'auction-summary') return 'auction';
+  if (phase === 'investment') return 'investment';
   if (phase === 'seed' || phase === 'early' || phase === 'mature') return 'market';
   if (phase === 'secondary-drop' || phase === 'secondary-hire') return 'secondary';
   if (phase === 'exit') return 'exit';

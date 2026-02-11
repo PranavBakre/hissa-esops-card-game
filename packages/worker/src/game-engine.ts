@@ -12,6 +12,7 @@ import type {
   IdeaCard,
   WildcardChoice,
   MarketCard,
+  Winners,
 } from '@esop-wars/shared';
 import { GAME, TEAM_DEFINITIONS } from '@esop-wars/shared';
 import {
@@ -114,7 +115,7 @@ export function createInitialState(config: GameConfig): GameState {
     name: tc.name,
     color: tc.color,
     esopRemaining: config.initialEsop,
-    valuation: config.initialValuation,
+    capital: config.initialCapital,
     employees: [],
     isComplete: false,
     isDisqualified: false,
@@ -129,13 +130,18 @@ export function createInitialState(config: GameConfig): GameState {
     wildcardUsed: false,
     wildcardActiveThisRound: null,
 
-    previousValuation: config.initialValuation,
+    previousCapital: config.initialCapital,
     currentGain: 0,
     isMarketLeader: false,
     marketLeaderCount: 0,
 
+    investedInTeamIndex: null,
+    investmentAmount: 0,
+    investorTeamIndex: null,
+    capitalAtInvestment: 0,
+
     exitChoice: null,
-    preExitValuation: 0,
+    preExitCapital: 0,
   }));
 
   // Build scaled employee deck based on team count
@@ -170,11 +176,20 @@ export function createInitialState(config: GameConfig): GameState {
     usedMarketCards: [],
     roundPerformance: [],
 
+    investmentSubPhase: 'declare',
+    investmentDeclarations: {},
+    investmentBids: {},
+    investmentConflicts: {},
+    investmentTieTarget: null,
+    investmentBotCeilings: {},
+
     droppedEmployees: [],
     secondaryPool: [],
 
     exitDeck: [],
     currentExitTurn: 0,
+
+    decisionLog: [],
   };
 }
 
@@ -219,6 +234,9 @@ export function isPhaseComplete(state: GameState): boolean {
     case 'auction-summary':
       return true; // Manual advance
 
+    case 'investment':
+      return state.investmentSubPhase === 'summary';
+
     case 'seed':
     case 'early':
     case 'mature':
@@ -252,6 +270,7 @@ export function advancePhase(state: GameState): GameState {
     'setup-summary',
     'auction',
     'auction-summary',
+    'investment',
     'seed',
     'early',
     'secondary-drop',
@@ -272,6 +291,14 @@ export function advancePhase(state: GameState): GameState {
       case 'auction':
         newState.currentCardIndex = 0;
         newState.currentBid = null;
+        break;
+      case 'investment':
+        newState.investmentSubPhase = 'declare';
+        newState.investmentDeclarations = {};
+        newState.investmentBids = {};
+        newState.investmentConflicts = {};
+        newState.investmentTieTarget = null;
+        newState.investmentBotCeilings = {};
         break;
       case 'seed':
       case 'early':
@@ -505,7 +532,7 @@ export function closeBidding(state: GameState): GameState {
       const missingEmployees = GAME.EMPLOYEES_PER_TEAM - team.employees.length;
       if (missingEmployees > 0) {
         const penalty = missingEmployees * 1_000_000;
-        team.valuation = Math.max(0, team.valuation - penalty);
+        team.capital = Math.max(0, team.capital - penalty);
       }
     });
     newState.phase = 'auction-summary';
@@ -532,7 +559,7 @@ export function skipCard(state: GameState): GameState {
       const missingEmployees = GAME.EMPLOYEES_PER_TEAM - team.employees.length;
       if (missingEmployees > 0) {
         const penalty = missingEmployees * 1_000_000;
-        team.valuation = Math.max(0, team.valuation - penalty);
+        team.capital = Math.max(0, team.capital - penalty);
       }
     });
     newState.phase = 'auction-summary';
@@ -581,29 +608,33 @@ export function getActiveTeams(state: GameState): Team[] {
   return state.teams.filter((t) => !t.isDisqualified);
 }
 
-export function getWinners(state: GameState): { founder: Team; employer: Team; sameTeam: boolean } | null {
+export function getWinners(state: GameState): Winners | null {
   if (state.phase !== 'winner') return null;
 
   const activeTeams = getActiveTeams(state);
   if (activeTeams.length === 0) return null;
 
-  // Best Founder: Highest valuation
+  // Best Founder: Highest capital
   const founder = activeTeams.reduce((best, team) =>
-    team.valuation > best.valuation ? team : best
+    team.capital > best.capital ? team : best
   );
 
-  // Best Employer: Highest (ESOP% given to employees) x valuation
+  // Best Employer: Highest (ESOP% given to employees) x capital
   const employer = activeTeams.reduce((best, team) => {
     const teamEsop = team.employees.reduce((sum, e) => sum + e.bidAmount, 0);
     const bestEsop = best.employees.reduce((sum, e) => sum + e.bidAmount, 0);
-    const teamScore = (teamEsop / GAME.INITIAL_ESOP) * team.valuation;
-    const bestScore = (bestEsop / GAME.INITIAL_ESOP) * best.valuation;
+    const teamScore = (teamEsop / GAME.INITIAL_ESOP) * team.capital;
+    const bestScore = (bestEsop / GAME.INITIAL_ESOP) * best.capital;
     return teamScore > bestScore ? team : best;
   });
+
+  // Best Investor: Highest return multiple
+  const investor = getInvestorWinner(state);
 
   return {
     founder,
     employer,
+    investor,
     sameTeam: founder.name === employer.name,
   };
 }
@@ -682,14 +713,14 @@ export function applyMarketEffects(state: GameState): GameState {
 
   if (!card) return state;
 
-  // Store previous valuations and calculate new ones
+  // Store previous capital and calculate new values
   newState.roundPerformance = [];
 
   newState.teams.forEach((team, index) => {
     if (team.isDisqualified) return;
 
-    const previousValuation = team.valuation;
-    team.previousValuation = previousValuation;
+    const previousCapital = team.capital;
+    team.previousCapital = previousCapital;
 
     // Calculate base change from employees
     let totalChange = 0;
@@ -738,18 +769,18 @@ export function applyMarketEffects(state: GameState): GameState {
       totalChange += 0.05 * (categoryCount['Engineering'] ?? 0);
     }
 
-    // Calculate new valuation
-    const valuationChange = previousValuation * totalChange;
-    const newValuation = Math.max(0, previousValuation + valuationChange);
+    // Calculate new capital
+    const capitalChange = previousCapital * totalChange;
+    const newCapital = Math.max(0, previousCapital + capitalChange);
 
-    team.valuation = Math.round(newValuation);
-    team.currentGain = Math.round(valuationChange);
+    team.capital = Math.round(newCapital);
+    team.currentGain = Math.round(capitalChange);
 
     // Record performance
     newState.roundPerformance.push({
       teamIndex: index,
-      previousValuation,
-      newValuation: team.valuation,
+      previousCapital,
+      newCapital: team.capital,
       gain: team.currentGain,
       percentChange: totalChange * 100,
     });
@@ -770,8 +801,8 @@ export function applyMarketLeaderBonus(state: GameState): GameState {
     team.isMarketLeader = false;
   });
 
-  // Find top 2 teams by GAINS (not valuation) - V1 behavior
-  // Sort by gains descending, use valuation as tiebreaker
+  // Find top 2 teams by GAINS (not capital) - V1 behavior
+  // Sort by gains descending, use capital as tiebreaker
   const activeTeams = newState.teams
     .map((t, i) => ({ team: t, index: i }))
     .filter(({ team }) => !team.isDisqualified)
@@ -779,7 +810,7 @@ export function applyMarketLeaderBonus(state: GameState): GameState {
       if (b.team.currentGain !== a.team.currentGain) {
         return b.team.currentGain - a.team.currentGain;
       }
-      return b.team.valuation - a.team.valuation;
+      return b.team.capital - a.team.capital;
     });
 
   // Top N get market leader status and bonus (scales with team count)
@@ -788,7 +819,7 @@ export function applyMarketLeaderBonus(state: GameState): GameState {
   activeTeams.slice(0, leaderCount).forEach(({ team }) => {
     team.isMarketLeader = true;
     team.marketLeaderCount++;
-    team.valuation = Math.round(team.valuation * (1 + leaderBonus));
+    team.capital = Math.round(team.capital * (1 + leaderBonus));
   });
 
   return newState;
@@ -803,26 +834,26 @@ export function applyWildcardModifiers(state: GameState): GameState {
     const choice = team.wildcardActiveThisRound;
     if (!choice || choice === 'pass') return;
 
-    // Use previousValuation (set before market effects) to compute the round's gain
-    const roundGain = team.valuation - team.previousValuation;
+    // Use previousCapital (set before market effects) to compute the round's gain
+    const roundGain = team.capital - team.previousCapital;
 
     if (choice === 'double-down') {
       // Double the gain/loss from this round
-      team.valuation = Math.max(0, team.valuation + roundGain);
+      team.capital = Math.max(0, team.capital + roundGain);
       team.currentGain = roundGain * 2;
     } else if (choice === 'shield' && roundGain < 0) {
-      // Revert losses — restore to pre-market valuation
-      team.valuation = team.previousValuation;
+      // Revert losses — restore to pre-market capital
+      team.capital = team.previousCapital;
       team.currentGain = 0;
     }
 
     // Update round performance entry
     const perfEntry = newState.roundPerformance.find((p) => p.teamIndex === index);
     if (perfEntry) {
-      perfEntry.newValuation = team.valuation;
+      perfEntry.newCapital = team.capital;
       perfEntry.gain = team.currentGain;
-      perfEntry.percentChange = team.previousValuation > 0
-        ? (team.currentGain / team.previousValuation) * 100
+      perfEntry.percentChange = team.previousCapital > 0
+        ? (team.currentGain / team.previousCapital) * 100
         : 0;
     }
   });
@@ -833,6 +864,231 @@ export function applyWildcardModifiers(state: GameState): GameState {
   });
 
   return newState;
+}
+
+// ===========================================
+// Investment Phase
+// ===========================================
+
+export function declareInvestment(
+  state: GameState,
+  teamIndex: number,
+  targetTeamIndex: number | null
+): GameState {
+  const newState = deepClone(state);
+  newState.investmentDeclarations[teamIndex] = targetTeamIndex;
+  return newState;
+}
+
+export function allInvestmentsDeclared(state: GameState): boolean {
+  const activeTeams = state.teams.filter((t) => !t.isDisqualified);
+  return activeTeams.every((_, i) => i in state.investmentDeclarations);
+}
+
+export function resolveInvestmentConflicts(state: GameState): GameState {
+  const newState = deepClone(state);
+
+  // Group declarations by target (excluding passes)
+  const targetMap: Record<number, number[]> = {};
+  for (const [teamStr, target] of Object.entries(newState.investmentDeclarations)) {
+    if (target === null) continue;
+    const teamIdx = Number(teamStr);
+    if (!targetMap[target]) {
+      targetMap[target] = [];
+    }
+    targetMap[target].push(teamIdx);
+  }
+
+  // Separate conflicts (>1 investor) from direct investments
+  const conflicts: Record<number, number[]> = {};
+  for (const [targetStr, investors] of Object.entries(targetMap)) {
+    const targetIdx = Number(targetStr);
+    if (investors.length > 1) {
+      conflicts[targetIdx] = investors;
+    }
+  }
+
+  newState.investmentConflicts = conflicts;
+
+  if (Object.keys(conflicts).length === 0) {
+    // No conflicts - finalize directly
+    return finalizeInvestments(newState);
+  }
+
+  // Set up first conflict (lowest target team index)
+  const sortedTargets = Object.keys(conflicts).map(Number).sort((a, b) => a - b);
+  newState.investmentSubPhase = 'conflict';
+  newState.investmentTieTarget = sortedTargets[0];
+  newState.investmentBids = {};
+
+  return newState;
+}
+
+export function placeInvestmentBid(
+  state: GameState,
+  teamIndex: number,
+  amount: number
+): GameState {
+  const newState = deepClone(state);
+  newState.investmentBids[teamIndex] = amount;
+  return newState;
+}
+
+export function passInvestmentBid(
+  state: GameState,
+  teamIndex: number
+): GameState {
+  const newState = deepClone(state);
+  // Mark as passed with -1 (distinguishes from "hasn't acted yet")
+  newState.investmentBids[teamIndex] = -1;
+  return newState;
+}
+
+export function allConflictBidsPlaced(state: GameState, targetTeamIndex: number): boolean {
+  const competitors = state.investmentConflicts[targetTeamIndex];
+  if (!competitors) return true;
+  return competitors.every((teamIdx) => teamIdx in state.investmentBids);
+}
+
+export function resolveConflictBids(state: GameState, targetTeamIndex: number): GameState {
+  const newState = deepClone(state);
+  const competitors = newState.investmentConflicts[targetTeamIndex];
+  if (!competitors) return state;
+
+  // Find active bidders (exclude those who passed with -1)
+  const activeBids = competitors
+    .filter((teamIdx) => newState.investmentBids[teamIdx] > 0)
+    .map((teamIdx) => ({ teamIndex: teamIdx, amount: newState.investmentBids[teamIdx] }));
+
+  if (activeBids.length === 0) {
+    // All passed - no investment for this target
+    delete newState.investmentConflicts[targetTeamIndex];
+    return advanceToNextConflictOrFinalize(newState);
+  }
+
+  // Find highest bid
+  const maxBid = Math.max(...activeBids.map((b) => b.amount));
+  const tiedBidders = activeBids.filter((b) => b.amount === maxBid);
+
+  if (tiedBidders.length > 1) {
+    // Tie - target owner resolves
+    newState.investmentSubPhase = 'resolve-tie';
+    newState.investmentTieTarget = targetTeamIndex;
+    return newState;
+  }
+
+  // Clear winner - record this investment
+  const winner = tiedBidders[0];
+  newState.investmentDeclarations[winner.teamIndex] = targetTeamIndex;
+  // Update the declaration amounts for finalization
+  // Store the winning bid amount on the team
+  newState.teams[winner.teamIndex].investmentAmount = winner.amount;
+
+  // Remove losing bidders' declarations for this target
+  for (const teamIdx of competitors) {
+    if (teamIdx !== winner.teamIndex) {
+      newState.investmentDeclarations[teamIdx] = null;
+    }
+  }
+
+  delete newState.investmentConflicts[targetTeamIndex];
+  return advanceToNextConflictOrFinalize(newState);
+}
+
+export function resolveInvestmentTie(
+  state: GameState,
+  targetTeamIndex: number,
+  chosenTeamIndex: number
+): GameState {
+  const newState = deepClone(state);
+  const competitors = newState.investmentConflicts[targetTeamIndex];
+  if (!competitors) return state;
+
+  const chosenBid = newState.investmentBids[chosenTeamIndex];
+  newState.teams[chosenTeamIndex].investmentAmount = chosenBid;
+
+  // Remove losing bidders' declarations
+  for (const teamIdx of competitors) {
+    if (teamIdx !== chosenTeamIndex) {
+      newState.investmentDeclarations[teamIdx] = null;
+    }
+  }
+
+  delete newState.investmentConflicts[targetTeamIndex];
+  return advanceToNextConflictOrFinalize(newState);
+}
+
+function advanceToNextConflictOrFinalize(state: GameState): GameState {
+  const newState = deepClone(state);
+  const remainingConflicts = Object.keys(newState.investmentConflicts).map(Number).sort((a, b) => a - b);
+
+  if (remainingConflicts.length > 0) {
+    // More conflicts to resolve
+    newState.investmentSubPhase = 'conflict';
+    newState.investmentTieTarget = remainingConflicts[0];
+    newState.investmentBids = {};
+    return newState;
+  }
+
+  // All conflicts resolved - finalize
+  return finalizeInvestments(newState);
+}
+
+export function finalizeInvestments(state: GameState): GameState {
+  const newState = deepClone(state);
+
+  // Process each declaration
+  for (const [teamStr, target] of Object.entries(newState.investmentDeclarations)) {
+    if (target === null) continue;
+    const investorIdx = Number(teamStr);
+    const investor = newState.teams[investorIdx];
+    const targetTeam = newState.teams[target];
+
+    // Use stored investmentAmount if set (from conflict resolution), otherwise use minimum
+    const amount = investor.investmentAmount > 0 ? investor.investmentAmount : GAME.INVESTMENT_MIN;
+
+    // Snapshot target capital before transfer
+    investor.capitalAtInvestment = targetTeam.capital;
+
+    // Transfer capital
+    investor.capital -= amount;
+    targetTeam.capital += amount;
+
+    // Record investment
+    investor.investedInTeamIndex = target;
+    investor.investmentAmount = amount;
+    targetTeam.investorTeamIndex = investorIdx;
+  }
+
+  newState.investmentSubPhase = 'summary';
+  return newState;
+}
+
+export function getInvestorWinner(state: GameState): { team: Team; returnMultiple: number } | null {
+  const investors = state.teams
+    .map((team, index) => ({ team, index }))
+    .filter(({ team }) => team.investedInTeamIndex !== null && !team.isDisqualified);
+
+  if (investors.length === 0) return null;
+
+  const scored = investors.map(({ team, index }) => {
+    const targetTeam = state.teams[team.investedInTeamIndex!];
+    const returnMultiple = (GAME.INVESTOR_EQUITY * targetTeam.capital) / team.investmentAmount;
+    return { team, index, returnMultiple };
+  });
+
+  // Sort by return multiple descending, then by lower investment amount (tiebreaker)
+  scored.sort((a, b) => {
+    if (b.returnMultiple !== a.returnMultiple) {
+      return b.returnMultiple - a.returnMultiple;
+    }
+    return a.team.investmentAmount - b.team.investmentAmount;
+  });
+
+  return {
+    team: scored[0].team,
+    returnMultiple: scored[0].returnMultiple,
+  };
 }
 
 // ===========================================
@@ -971,8 +1227,8 @@ export function drawExit(
   const drawnCard = newState.exitDeck.shift();
   if (!drawnCard) return state;
 
-  // Store pre-exit valuation and set choice
-  team.preExitValuation = team.valuation;
+  // Store pre-exit capital and set choice
+  team.preExitCapital = team.capital;
   team.exitChoice = drawnCard;
 
   // Advance to next team's turn
@@ -991,7 +1247,7 @@ export function applyExitMultipliers(state: GameState): GameState {
   // Apply each team's individual exit multiplier
   newState.teams.forEach((team) => {
     if (!team.isDisqualified && team.exitChoice) {
-      team.valuation = Math.round(team.valuation * team.exitChoice.multiplier);
+      team.capital = Math.round(team.capital * team.exitChoice.multiplier);
     }
   });
 

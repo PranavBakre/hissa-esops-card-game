@@ -2367,6 +2367,348 @@ input::placeholder, textarea::placeholder {
 }
 
 /* ===========================================
+   Investment Phase
+   =========================================== */
+.investment-phase {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.investment-phase h2 {
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.investment-info {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.investment-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.investment-target-card {
+  background: var(--surface-secondary);
+  border: 2px solid var(--border-default);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.15s;
+  text-align: center;
+}
+
+.investment-target-card:hover {
+  border-color: var(--team-color, var(--accent-primary));
+  transform: translateY(-2px);
+}
+
+.target-name {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 4px;
+  color: var(--team-color, var(--text-primary));
+}
+
+.target-capital {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--green);
+  margin-bottom: 4px;
+}
+
+.target-employees {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.investment-declare {
+  margin-bottom: 24px;
+}
+
+.investment-declare h3 {
+  font-size: 17px;
+  margin-bottom: 8px;
+}
+
+.investment-waiting {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+}
+
+.investment-waiting h3 {
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.investment-status {
+  margin-top: 24px;
+}
+
+.investment-status h3 {
+  font-size: 15px;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+}
+
+.investment-status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.investment-status-item .status {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+.investment-status-item.declared .status {
+  color: var(--green);
+}
+
+.investment-status-item.pending .status {
+  color: var(--text-muted);
+}
+
+/* Conflict sub-phase */
+.conflict-target {
+  background: var(--surface-secondary);
+  border: 2px solid var(--team-color, var(--border-default));
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.conflict-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.conflict-team-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--team-color, var(--text-primary));
+}
+
+.conflict-team-capital {
+  font-size: 18px;
+  color: var(--green);
+  margin-top: 4px;
+}
+
+.conflict-competitors {
+  margin-bottom: 16px;
+}
+
+.conflict-competitors h3 {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.competitor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-secondary);
+  margin-bottom: 6px;
+}
+
+.competitor-name {
+  font-weight: 600;
+}
+
+.competitor-bid {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+.investment-bid-controls {
+  margin-top: 16px;
+}
+
+.investment-bid-controls .bid-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  justify-content: center;
+}
+
+.investment-bid-controls .prefix {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+.investment-bid-controls input {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  width: 140px;
+  text-align: center;
+}
+
+.investment-bid-controls .suffix {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.investment-bid-controls .bid-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* Tie sub-phase */
+.tie-amount {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.tie-resolution {
+  margin-bottom: 20px;
+}
+
+.tie-resolution h3 {
+  font-size: 17px;
+  margin-bottom: 8px;
+}
+
+.tie-resolution p {
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.tie-options {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.tie-option-card {
+  background: var(--surface-secondary);
+  border: 2px solid var(--border-default);
+  border-radius: 12px;
+  padding: 20px 24px;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.15s;
+  text-align: center;
+  min-width: 150px;
+}
+
+.tie-option-card:hover {
+  border-color: var(--team-color, var(--accent-primary));
+  transform: translateY(-2px);
+}
+
+.tie-option-name {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--team-color, var(--text-primary));
+  margin-bottom: 4px;
+}
+
+.tie-option-capital {
+  font-size: 14px;
+  color: var(--green);
+}
+
+/* Investment summary */
+.investment-results {
+  margin-bottom: 20px;
+}
+
+.investment-result-card {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 8px;
+}
+
+.investment-arrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.arrow-icon {
+  font-size: 18px;
+  color: var(--text-muted);
+}
+
+.investment-detail {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.no-investments {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+}
+
+.investment-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+
+.investment-badge.investor {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.investment-badge.target {
+  background: var(--green);
+  color: white;
+}
+
+/* Sidebar investor indicator */
+.sidebar-investor {
+  font-size: 11px;
+  color: var(--accent-primary);
+  margin-top: 2px;
+}
+
+/* Winner card investor variant */
+.winner-card.investor {
+  border-color: var(--accent-primary);
+}
+
+.winner-card.investor::before {
+  background: linear-gradient(90deg, var(--accent-primary), var(--green));
+}
+
+.winner-card.investor .winner-card-stat {
+  color: var(--accent-primary);
+}
+
+/* ===========================================
    Exit Phase
    =========================================== */
 .exit-phase {
@@ -3395,5 +3737,122 @@ input::placeholder, textarea::placeholder {
 
   .lobby-start-buttons .btn {
     width: 100%;
+  }
+}
+
+/* ===========================================
+   Decision Log Panel
+   =========================================== */
+.decision-log-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 340px;
+  max-width: 90vw;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-default);
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+.decision-log-panel.open {
+  transform: translateX(0);
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.log-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.log-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 22px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.log-close:hover {
+  color: var(--text-primary);
+}
+
+.log-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.log-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px 16px;
+  font-size: 14px;
+}
+
+.log-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.log-entry:hover {
+  background: var(--bg-overlay);
+}
+
+.log-phase {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg-base);
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-subtle);
+}
+
+.log-team {
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.log-message {
+  color: var(--text-primary);
+}
+
+@media (max-width: 600px) {
+  .decision-log-panel {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .log-entry {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  .log-header {
+    padding: 12px;
   }
 }

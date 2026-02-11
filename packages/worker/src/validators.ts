@@ -271,6 +271,185 @@ export function validateDrawMarket(
 }
 
 // ===========================================
+// Investment Validators
+// ===========================================
+
+export function validateDeclareInvestment(
+  state: GameState,
+  teamIndex: number,
+  targetTeamIndex: number | null
+): ValidationResult {
+  if (state.phase !== 'investment') {
+    return { valid: false, error: 'Not in investment phase' };
+  }
+
+  if (state.investmentSubPhase !== 'declare') {
+    return { valid: false, error: 'Not in declare sub-phase' };
+  }
+
+  const team = state.teams[teamIndex];
+
+  if (team.isDisqualified) {
+    return { valid: false, error: 'Team is disqualified' };
+  }
+
+  // Check if already declared
+  if (teamIndex in state.investmentDeclarations) {
+    return { valid: false, error: 'Already declared investment' };
+  }
+
+  // Check if already invested in a previous round (shouldn't happen since investment is once)
+  if (team.investedInTeamIndex !== null) {
+    return { valid: false, error: 'Already invested' };
+  }
+
+  if (targetTeamIndex !== null) {
+    // Validate target
+    if (targetTeamIndex < 0 || targetTeamIndex >= state.teams.length) {
+      return { valid: false, error: 'Invalid target team index' };
+    }
+
+    if (targetTeamIndex === teamIndex) {
+      return { valid: false, error: 'Cannot invest in yourself' };
+    }
+
+    const target = state.teams[targetTeamIndex];
+
+    if (target.isDisqualified) {
+      return { valid: false, error: 'Target team is disqualified' };
+    }
+
+    if (target.investorTeamIndex !== null) {
+      return { valid: false, error: 'Target already has an investor' };
+    }
+  }
+
+  return { valid: true };
+}
+
+export function validatePlaceInvestmentBid(
+  state: GameState,
+  teamIndex: number,
+  amount: number
+): ValidationResult {
+  if (state.phase !== 'investment') {
+    return { valid: false, error: 'Not in investment phase' };
+  }
+
+  if (state.investmentSubPhase !== 'conflict') {
+    return { valid: false, error: 'Not in conflict sub-phase' };
+  }
+
+  if (state.investmentTieTarget === null) {
+    return { valid: false, error: 'No active conflict' };
+  }
+
+  // Check team is in the current conflict
+  const competitors = state.investmentConflicts[state.investmentTieTarget];
+  if (!competitors || !competitors.includes(teamIndex)) {
+    return { valid: false, error: 'Not a competitor in this conflict' };
+  }
+
+  // Check team hasn't already bid or passed
+  if (teamIndex in state.investmentBids) {
+    return { valid: false, error: 'Already placed bid or passed' };
+  }
+
+  // Find current highest bid
+  const currentBids = competitors
+    .filter((idx) => state.investmentBids[idx] > 0)
+    .map((idx) => state.investmentBids[idx]);
+  const currentHighest = currentBids.length > 0 ? Math.max(...currentBids) : 0;
+
+  // Bid must be >= current highest (equal creates a tie)
+  if (currentHighest > 0 && amount < currentHighest) {
+    return { valid: false, error: `Bid must be at least $${currentHighest.toLocaleString()} to match or exceed current highest` };
+  }
+
+  if (amount < GAME.INVESTMENT_MIN) {
+    return { valid: false, error: `Bid must be at least $${GAME.INVESTMENT_MIN.toLocaleString()}` };
+  }
+
+  if (amount > GAME.INVESTMENT_MAX) {
+    return { valid: false, error: `Bid must not exceed $${GAME.INVESTMENT_MAX.toLocaleString()}` };
+  }
+
+  return { valid: true };
+}
+
+export function validatePassInvestmentBid(
+  state: GameState,
+  teamIndex: number
+): ValidationResult {
+  if (state.phase !== 'investment') {
+    return { valid: false, error: 'Not in investment phase' };
+  }
+
+  if (state.investmentSubPhase !== 'conflict') {
+    return { valid: false, error: 'Not in conflict sub-phase' };
+  }
+
+  if (state.investmentTieTarget === null) {
+    return { valid: false, error: 'No active conflict' };
+  }
+
+  // Check team is in the current conflict
+  const competitors = state.investmentConflicts[state.investmentTieTarget];
+  if (!competitors || !competitors.includes(teamIndex)) {
+    return { valid: false, error: 'Not a competitor in this conflict' };
+  }
+
+  // Check team hasn't already bid or passed
+  if (teamIndex in state.investmentBids) {
+    return { valid: false, error: 'Already placed bid or passed' };
+  }
+
+  return { valid: true };
+}
+
+export function validateResolveInvestmentTie(
+  state: GameState,
+  teamIndex: number,
+  chosenTeamIndex: number
+): ValidationResult {
+  if (state.phase !== 'investment') {
+    return { valid: false, error: 'Not in investment phase' };
+  }
+
+  if (state.investmentSubPhase !== 'resolve-tie') {
+    return { valid: false, error: 'Not in resolve-tie sub-phase' };
+  }
+
+  if (state.investmentTieTarget === null) {
+    return { valid: false, error: 'No active tie' };
+  }
+
+  // teamIndex must be the owner of the target company
+  if (state.investmentTieTarget !== teamIndex) {
+    return { valid: false, error: 'Only the target company owner can resolve ties' };
+  }
+
+  // chosenTeamIndex must be one of the tied bidders
+  const competitors = state.investmentConflicts[state.investmentTieTarget];
+  if (!competitors) {
+    return { valid: false, error: 'No competitors for this target' };
+  }
+
+  // Find the tied bidders (those with the highest bid)
+  const activeBids = competitors
+    .filter((idx) => state.investmentBids[idx] > 0)
+    .map((idx) => ({ teamIndex: idx, amount: state.investmentBids[idx] }));
+  const maxBid = Math.max(...activeBids.map((b) => b.amount));
+  const tiedTeams = activeBids.filter((b) => b.amount === maxBid).map((b) => b.teamIndex);
+
+  if (!tiedTeams.includes(chosenTeamIndex)) {
+    return { valid: false, error: 'Chosen team is not among the tied bidders' };
+  }
+
+  return { valid: true };
+}
+
+// ===========================================
 // Secondary Auction Validators
 // ===========================================
 
@@ -366,6 +545,23 @@ export function isPlayersTurn(
   // Wildcard allows parallel selection
   if (state.wildcardPhase) {
     return state.teamWildcardSelections[teamIndex] === undefined;
+  }
+
+  // Investment: depends on sub-phase
+  if (state.phase === 'investment') {
+    if (state.investmentSubPhase === 'declare') {
+      return !(teamIndex in state.investmentDeclarations);
+    }
+    if (state.investmentSubPhase === 'conflict') {
+      const competitors = state.investmentTieTarget !== null
+        ? state.investmentConflicts[state.investmentTieTarget]
+        : undefined;
+      return competitors !== undefined && competitors.includes(teamIndex) && !(teamIndex in state.investmentBids);
+    }
+    if (state.investmentSubPhase === 'resolve-tie') {
+      return state.investmentTieTarget === teamIndex;
+    }
+    return false;
   }
 
   // Secondary drop allows parallel drops

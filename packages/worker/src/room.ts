@@ -39,6 +39,15 @@ import {
   drawExit,
   allExitsChosen,
   applyExitMultipliers,
+  declareInvestment,
+  allInvestmentsDeclared,
+  resolveInvestmentConflicts,
+  placeInvestmentBid,
+  passInvestmentBid,
+  allConflictBidsPlaced,
+  resolveConflictBids,
+  resolveInvestmentTie,
+  finalizeInvestments,
 } from './game-engine';
 import {
   validateDropCard,
@@ -50,6 +59,10 @@ import {
   validateDrawMarket,
   validateDropEmployee,
   validateDrawExit,
+  validateDeclareInvestment,
+  validatePlaceInvestmentBid,
+  validatePassInvestmentBid,
+  validateResolveInvestmentTie,
 } from './validators';
 import {
   decideSetupDrop,
@@ -60,6 +73,10 @@ import {
   decideSecondaryDrop,
   getBotDelay,
   BOT_TIMING,
+  decideInvestmentTarget,
+  decideBotMaxBid,
+  decideInvestmentBid,
+  decideInvestmentTieResolution,
 } from './bot-player';
 
 // ===========================================
@@ -88,6 +105,16 @@ function getEventDataString(data: unknown): string | null {
   if (typeof data === 'string') return data;
   if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
   return null;
+}
+
+function formatLogCurrency(value: number): string {
+  if (value >= 1_000_000 || value <= -1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000 || value <= -1_000) {
+    return `$${(value / 1_000).toFixed(0)}K`;
+  }
+  return `$${value}`;
 }
 
 // ===========================================
@@ -312,6 +339,22 @@ export class GameRoom {
         this.handleSetGameSpeed(ws, session, msg.speed);
         break;
 
+      case 'declare-investment':
+        this.handleDeclareInvestment(ws, session, msg.targetTeamIndex);
+        break;
+
+      case 'place-investment-bid':
+        this.handlePlaceInvestmentBid(ws, session, msg.amount);
+        break;
+
+      case 'pass-investment-bid':
+        this.handlePassInvestmentBid(ws, session);
+        break;
+
+      case 'resolve-investment-tie':
+        this.handleResolveInvestmentTie(ws, session, msg.chosenTeamIndex);
+        break;
+
       default: {
         const unhandledMsg: { type: string } = msg;
         this.send(ws, { type: 'error', message: `Unknown message type: ${unhandledMsg.type}` });
@@ -511,7 +554,7 @@ export class GameRoom {
     // Create initial game state
     this.roomState.gameState = createInitialState({
       teams: teamConfigs,
-      initialValuation: GAME.INITIAL_VALUATION,
+      initialCapital: GAME.INITIAL_CAPITAL,
       initialEsop: GAME.INITIAL_ESOP,
     });
     this.roomState.status = 'PLAYING';
@@ -553,7 +596,7 @@ export class GameRoom {
     // Create initial game state
     this.roomState.gameState = createInitialState({
       teams: teamConfigs,
-      initialValuation: GAME.INITIAL_VALUATION,
+      initialCapital: GAME.INITIAL_CAPITAL,
       initialEsop: GAME.INITIAL_ESOP,
     });
     this.roomState.status = 'PLAYING';
@@ -616,6 +659,8 @@ export class GameRoom {
       name
     );
 
+    this.logDecision(session.teamIndex, `registered as "${name}"`);
+
     // Broadcast update
     this.broadcast({
       type: 'team-updated',
@@ -640,7 +685,7 @@ export class GameRoom {
     }
 
     const phase = this.roomState.gameState.phase;
-    const manualAdvancePhases = ['setup-summary', 'auction-summary'];
+    const manualAdvancePhases = ['setup-summary', 'auction-summary', 'investment'];
 
     if (!manualAdvancePhases.includes(phase)) {
       this.send(ws, { type: 'error', message: 'Cannot manually advance this phase' });
@@ -771,6 +816,12 @@ export class GameRoom {
       ideaId
     );
 
+    const lockedTeam = this.roomState.gameState.teams[session.teamIndex];
+    const bonusText = lockedTeam.setupBonus
+      ? ` (+${(lockedTeam.setupBonus.bonus.modifier * 100).toFixed(0)}% ${lockedTeam.setupBonus.bonus.category} bonus)`
+      : '';
+    this.logDecision(session.teamIndex, `locked ${lockedTeam.lockedSegment?.name} + ${lockedTeam.lockedIdea?.name}${bonusText}`);
+
     this.broadcast({
       type: 'team-updated',
       teamIndex: session.teamIndex,
@@ -850,6 +901,13 @@ export class GameRoom {
     // Apply wildcards (marks which teams used wildcards, exits wildcard phase)
     this.roomState.gameState = applyWildcards(this.roomState.gameState);
 
+    // Log wildcard choices (must happen before applyWildcardModifiers clears them)
+    this.roomState.gameState.teams.forEach((t, i) => {
+      if (t.wildcardActiveThisRound && t.wildcardActiveThisRound !== 'pass') {
+        this.logDecision(i, `played wildcard: ${t.wildcardActiveThisRound}`);
+      }
+    });
+
     // Apply wildcard modifiers to this round's results
     this.roomState.gameState = applyWildcardModifiers(this.roomState.gameState);
 
@@ -895,6 +953,11 @@ export class GameRoom {
     // Draw market card
     this.roomState.gameState = drawMarketCard(this.roomState.gameState);
 
+    const marketCard = this.roomState.gameState.currentMarketCard;
+    if (marketCard) {
+      this.logDecision(null, `market card drawn: ${marketCard.name}`);
+    }
+
     // Broadcast drawn card
     this.broadcast({
       type: 'market-card-drawn',
@@ -907,7 +970,14 @@ export class GameRoom {
     // Apply market leader bonus
     this.roomState.gameState = applyMarketLeaderBonus(this.roomState.gameState);
 
-    // Broadcast results (teams can now see their valuations before wildcard decision)
+    // Log round results
+    this.roomState.gameState.roundPerformance.forEach((perf) => {
+      const team = this.roomState!.gameState!.teams[perf.teamIndex];
+      const sign = perf.gain >= 0 ? '+' : '';
+      this.logDecision(perf.teamIndex, `capital ${sign}${formatLogCurrency(perf.gain)} (now ${formatLogCurrency(team.capital)})`);
+    });
+
+    // Broadcast results (teams can now see their capital before wildcard decision)
     this.broadcast({
       type: 'market-results',
       performance: this.roomState.gameState.roundPerformance,
@@ -925,6 +995,285 @@ export class GameRoom {
 
     // Schedule bot wildcards if needed
     this.scheduleBotTurnIfNeeded();
+  }
+
+  // ===========================================
+  // Investment Phase Handlers
+  // ===========================================
+
+  private handleDeclareInvestment(
+    ws: WebSocket,
+    session: SessionData,
+    targetTeamIndex: number | null
+  ): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validateDeclareInvestment(
+      this.roomState.gameState,
+      session.teamIndex,
+      targetTeamIndex
+    );
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    this.roomState.gameState = declareInvestment(
+      this.roomState.gameState,
+      session.teamIndex,
+      targetTeamIndex
+    );
+
+    if (targetTeamIndex !== null) {
+      const targetName = this.roomState.gameState.teams[targetTeamIndex].name;
+      this.logDecision(session.teamIndex, `wants to invest in ${targetName}`);
+    } else {
+      this.logDecision(session.teamIndex, `passed on investing`);
+    }
+
+    this.broadcast({
+      type: 'investment-declared',
+      teamIndex: session.teamIndex,
+    });
+
+    if (allInvestmentsDeclared(this.roomState.gameState)) {
+      this.resolveInvestmentDeclarations();
+    }
+  }
+
+  private resolveInvestmentDeclarations(): void {
+    if (!this.roomState?.gameState) return;
+
+    this.roomState.gameState = resolveInvestmentConflicts(this.roomState.gameState);
+
+    if (this.roomState.gameState.investmentSubPhase === 'summary') {
+      // No conflicts - broadcast resolved investments
+      this.broadcastInvestmentResolved();
+      this.broadcast({ type: 'game-state', state: this.roomState.gameState });
+
+      // In spectator mode, auto-advance the summary
+      if (this.roomState.spectatorMode) {
+        this.scheduleSpectatorAutoAdvance();
+      }
+    } else if (this.roomState.gameState.investmentSubPhase === 'conflict') {
+      // Broadcast the first conflict
+      const target = this.roomState.gameState.investmentTieTarget;
+      if (target !== null) {
+        const competitors = this.roomState.gameState.investmentConflicts[target];
+        if (competitors) {
+          this.broadcast({
+            type: 'investment-conflict',
+            targetTeamIndex: target,
+            competitors,
+          });
+        }
+      }
+
+      this.broadcast({ type: 'game-state', state: this.roomState.gameState });
+
+      // Schedule bot bids for the conflict
+      this.scheduleBotInvestmentBids();
+    }
+  }
+
+  private handlePlaceInvestmentBid(
+    ws: WebSocket,
+    session: SessionData,
+    amount: number
+  ): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validatePlaceInvestmentBid(
+      this.roomState.gameState,
+      session.teamIndex,
+      amount
+    );
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    this.roomState.gameState = placeInvestmentBid(
+      this.roomState.gameState,
+      session.teamIndex,
+      amount
+    );
+
+    this.broadcast({
+      type: 'investment-bid-placed',
+      teamIndex: session.teamIndex,
+      amount,
+    });
+
+    const target = this.roomState.gameState.investmentTieTarget;
+    if (target !== null && allConflictBidsPlaced(this.roomState.gameState, target)) {
+      this.resolveCurrentConflict(target);
+    }
+  }
+
+  private handlePassInvestmentBid(ws: WebSocket, session: SessionData): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validatePassInvestmentBid(
+      this.roomState.gameState,
+      session.teamIndex
+    );
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    this.roomState.gameState = passInvestmentBid(
+      this.roomState.gameState,
+      session.teamIndex
+    );
+
+    this.broadcast({
+      type: 'investment-bid-passed',
+      teamIndex: session.teamIndex,
+    });
+
+    const target = this.roomState.gameState.investmentTieTarget;
+    if (target !== null && allConflictBidsPlaced(this.roomState.gameState, target)) {
+      this.resolveCurrentConflict(target);
+    }
+  }
+
+  private resolveCurrentConflict(targetTeamIndex: number): void {
+    if (!this.roomState?.gameState) return;
+
+    this.roomState.gameState = resolveConflictBids(this.roomState.gameState, targetTeamIndex);
+
+    if (this.roomState.gameState.investmentSubPhase === 'resolve-tie') {
+      // Tie detected - broadcast for resolution
+      const target = this.roomState.gameState.investmentTieTarget;
+      if (target !== null) {
+        const competitors = this.roomState.gameState.investmentConflicts[target];
+        if (competitors) {
+          const activeBids = competitors
+            .filter((idx) => this.roomState!.gameState!.investmentBids[idx] > 0)
+            .map((idx) => ({ teamIndex: idx, amount: this.roomState!.gameState!.investmentBids[idx] }));
+          const maxBid = Math.max(...activeBids.map((b) => b.amount));
+          const tiedTeams = activeBids.filter((b) => b.amount === maxBid);
+
+          this.broadcast({
+            type: 'investment-tie',
+            targetTeamIndex: target,
+            tiedTeams,
+          });
+        }
+      }
+
+      this.broadcast({ type: 'game-state', state: this.roomState.gameState });
+
+      // Schedule bot tie resolution if target owner is a bot
+      this.scheduleBotInvestmentTieResolution();
+    } else if (this.roomState.gameState.investmentSubPhase === 'conflict') {
+      // More conflicts to resolve
+      const target = this.roomState.gameState.investmentTieTarget;
+      if (target !== null) {
+        const competitors = this.roomState.gameState.investmentConflicts[target];
+        if (competitors) {
+          this.broadcast({
+            type: 'investment-conflict',
+            targetTeamIndex: target,
+            competitors,
+          });
+        }
+      }
+
+      this.broadcast({ type: 'game-state', state: this.roomState.gameState });
+      this.scheduleBotInvestmentBids();
+    } else if (this.roomState.gameState.investmentSubPhase === 'summary') {
+      // All conflicts resolved
+      this.broadcastInvestmentResolved();
+      this.broadcast({ type: 'game-state', state: this.roomState.gameState });
+
+      if (this.roomState.spectatorMode) {
+        this.scheduleSpectatorAutoAdvance();
+      }
+    }
+  }
+
+  private handleResolveInvestmentTie(
+    ws: WebSocket,
+    session: SessionData,
+    chosenTeamIndex: number
+  ): void {
+    if (!this.roomState?.gameState || session.teamIndex === null) return;
+
+    const validation = validateResolveInvestmentTie(
+      this.roomState.gameState,
+      session.teamIndex,
+      chosenTeamIndex
+    );
+    if (!validation.valid) {
+      this.send(ws, { type: 'error', message: validation.error ?? 'Invalid action' });
+      return;
+    }
+
+    const targetTeamIndex = this.roomState.gameState.investmentTieTarget;
+    if (targetTeamIndex === null) return;
+
+    this.roomState.gameState = resolveInvestmentTie(
+      this.roomState.gameState,
+      targetTeamIndex,
+      chosenTeamIndex
+    );
+
+    // Check what sub-phase we're in now
+    if (this.roomState.gameState.investmentSubPhase === 'conflict') {
+      // More conflicts
+      const nextTarget = this.roomState.gameState.investmentTieTarget;
+      if (nextTarget !== null) {
+        const competitors = this.roomState.gameState.investmentConflicts[nextTarget];
+        if (competitors) {
+          this.broadcast({
+            type: 'investment-conflict',
+            targetTeamIndex: nextTarget,
+            competitors,
+          });
+        }
+      }
+      this.broadcast({ type: 'game-state', state: this.roomState.gameState });
+      this.scheduleBotInvestmentBids();
+    } else if (this.roomState.gameState.investmentSubPhase === 'summary') {
+      this.broadcastInvestmentResolved();
+      this.broadcast({ type: 'game-state', state: this.roomState.gameState });
+
+      if (this.roomState.spectatorMode) {
+        this.scheduleSpectatorAutoAdvance();
+      }
+    }
+  }
+
+  private broadcastInvestmentResolved(): void {
+    if (!this.roomState?.gameState) return;
+
+    const investments: { investor: number; target: number; amount: number }[] = [];
+    for (const team of this.roomState.gameState.teams) {
+      const teamIdx = this.roomState.gameState.teams.indexOf(team);
+      if (team.investedInTeamIndex !== null) {
+        investments.push({
+          investor: teamIdx,
+          target: team.investedInTeamIndex,
+          amount: team.investmentAmount,
+        });
+      }
+    }
+
+    // Log each finalized investment
+    investments.forEach((inv) => {
+      const investorName = this.roomState!.gameState!.teams[inv.investor].name;
+      const targetName = this.roomState!.gameState!.teams[inv.target].name;
+      this.logDecision(inv.investor, `invested ${formatLogCurrency(inv.amount)} in ${targetName} for 5% equity`);
+      this.logDecision(inv.target, `received ${formatLogCurrency(inv.amount)} investment from ${investorName}`);
+    });
+
+    this.broadcast({
+      type: 'investment-resolved',
+      investments,
+    });
   }
 
   // ===========================================
@@ -965,6 +1314,11 @@ export class GameRoom {
 
   private revealDropsAndStartSecondary(): void {
     if (!this.roomState?.gameState) return;
+
+    // Log dropped employees
+    this.roomState.gameState.droppedEmployees.forEach((d) => {
+      this.logDecision(d.fromTeamIndex, `released ${d.employee.name} (${d.employee.category})`);
+    });
 
     // Broadcast dropped employees
     this.broadcast({
@@ -1019,8 +1373,9 @@ export class GameRoom {
 
     const team = this.roomState.gameState.teams[session.teamIndex];
 
-    // Broadcast the drawn exit card
+    // Log and broadcast the drawn exit card
     if (team.exitChoice) {
+      this.logDecision(session.teamIndex, `drew ${team.exitChoice.name} (${team.exitChoice.multiplier}x exit multiplier)`);
       this.broadcast({
         type: 'exit-chosen',
         teamIndex: session.teamIndex,
@@ -1084,6 +1439,8 @@ export class GameRoom {
       // Start auction timer
       this.scheduleAuctionTimeout();
       this.scheduleBotBids();
+    } else if (phase === 'investment') {
+      this.scheduleBotInvestmentActions();
     } else if (this.roomState.gameState.wildcardPhase) {
       // Schedule bot wildcard selections
       this.scheduleBotWildcards();
@@ -1174,6 +1531,67 @@ export class GameRoom {
     }
   }
 
+  private scheduleBotInvestmentActions(): void {
+    if (!this.roomState?.gameState || this.roomState.gameState.phase !== 'investment') return;
+
+    const subPhase = this.roomState.gameState.investmentSubPhase;
+
+    if (subPhase === 'declare') {
+      this.scheduleBotInvestmentDeclarations();
+    } else if (subPhase === 'conflict') {
+      this.scheduleBotInvestmentBids();
+    } else if (subPhase === 'resolve-tie') {
+      this.scheduleBotInvestmentTieResolution();
+    }
+  }
+
+  private scheduleBotInvestmentDeclarations(): void {
+    if (!this.roomState?.gameState) return;
+
+    const botsNeedingDeclaration = this.roomState.gameState.teams
+      .filter((t, i) =>
+        t.isBot &&
+        !t.isDisqualified &&
+        !(i in this.roomState!.gameState!.investmentDeclarations)
+      );
+
+    if (botsNeedingDeclaration.length > 0) {
+      this.scheduleAlarm(getBotDelay(this.getSpeedMultiplier()));
+    }
+  }
+
+  private scheduleBotInvestmentBids(): void {
+    if (!this.roomState?.gameState) return;
+
+    const target = this.roomState.gameState.investmentTieTarget;
+    if (target === null) return;
+
+    const competitors = this.roomState.gameState.investmentConflicts[target];
+    if (!competitors) return;
+
+    const botsNeedingBid = competitors.filter((idx) => {
+      const team = this.roomState!.gameState!.teams[idx];
+      return team.isBot && !(idx in this.roomState!.gameState!.investmentBids);
+    });
+
+    if (botsNeedingBid.length > 0) {
+      const multiplier = this.getSpeedMultiplier();
+      this.scheduleAlarm(Math.max(10, Math.round(BOT_TIMING.BID_DELAY_MS * multiplier)));
+    }
+  }
+
+  private scheduleBotInvestmentTieResolution(): void {
+    if (!this.roomState?.gameState) return;
+
+    const target = this.roomState.gameState.investmentTieTarget;
+    if (target === null) return;
+
+    const targetTeam = this.roomState.gameState.teams[target];
+    if (targetTeam.isBot) {
+      this.scheduleAlarm(getBotDelay(this.getSpeedMultiplier()));
+    }
+  }
+
   private scheduleAuctionTimeout(): void {
     const multiplier = this.getSpeedMultiplier();
     this.scheduleAlarm(Math.max(10, Math.round(TIMING.BID_TIMEOUT_MS * multiplier)));
@@ -1204,6 +1622,7 @@ export class GameRoom {
           index,
           botNames[nameIndex]
         );
+        this.logDecision(index, `registered as "${botNames[nameIndex]}"`);
         botCounter++;
 
         this.broadcast({
@@ -1252,6 +1671,8 @@ export class GameRoom {
     const autoAdvanceDelay = Math.max(10, Math.round(1500 * multiplier));
 
     if (phase === 'setup-summary' || phase === 'auction-summary') {
+      this.scheduleAlarm(autoAdvanceDelay);
+    } else if (phase === 'investment' && this.roomState.gameState.investmentSubPhase === 'summary') {
       this.scheduleAlarm(autoAdvanceDelay);
     } else if (phase === 'seed' || phase === 'early' || phase === 'mature') {
       // Auto-draw market card (if not yet drawn and not in wildcard phase)
@@ -1312,6 +1733,15 @@ export class GameRoom {
     }
   }
 
+  private logDecision(teamIndex: number | null, message: string): void {
+    if (!this.roomState?.gameState) return;
+    this.roomState.gameState.decisionLog.push({
+      phase: this.roomState.gameState.phase,
+      teamIndex,
+      message,
+    });
+  }
+
   async alarm(): Promise<void> {
     // Load state in case DO hibernated
     await this.loadState();
@@ -1326,6 +1756,8 @@ export class GameRoom {
       this.executeBotLock();
     } else if (phase === 'auction' || phase === 'secondary-hire') {
       this.handleAuctionTimeout();
+    } else if (phase === 'investment') {
+      this.executeBotInvestmentAction();
     } else if (this.roomState.gameState.wildcardPhase) {
       this.executeBotWildcard();
     } else if (phase === 'secondary-drop') {
@@ -1409,6 +1841,12 @@ export class GameRoom {
         decision.ideaId
       );
 
+      const lockedBot = this.roomState.gameState.teams[botIndex];
+      const bonusText = lockedBot.setupBonus
+        ? ` (+${(lockedBot.setupBonus.bonus.modifier * 100).toFixed(0)}% ${lockedBot.setupBonus.bonus.category} bonus)`
+        : '';
+      this.logDecision(botIndex, `locked ${lockedBot.lockedSegment?.name} + ${lockedBot.lockedIdea?.name}${bonusText}`);
+
       this.broadcast({
         type: 'team-updated',
         teamIndex: botIndex,
@@ -1491,6 +1929,12 @@ export class GameRoom {
       this.roomState.gameState = closeBidding(this.roomState.gameState);
     }
 
+    if (previousBid) {
+      this.logDecision(previousBid.teamIndex, `hired ${card.name} (${card.category}) for ${previousBid.amount}% ESOP`);
+    } else {
+      this.logDecision(null, `no bids for ${card.name} (${card.category})`);
+    }
+
     this.broadcast({
       type: 'bidding-closed',
       winner: previousBid,
@@ -1516,6 +1960,166 @@ export class GameRoom {
       }
     } else {
       this.checkPhaseCompletion();
+    }
+  }
+
+  private executeBotInvestmentAction(): void {
+    if (!this.roomState?.gameState || this.roomState.gameState.phase !== 'investment') return;
+
+    const subPhase = this.roomState.gameState.investmentSubPhase;
+
+    if (subPhase === 'declare') {
+      this.executeBotInvestmentDeclaration();
+    } else if (subPhase === 'conflict') {
+      this.executeBotInvestmentBid();
+    } else if (subPhase === 'resolve-tie') {
+      this.executeBotInvestmentTieResolution();
+    } else if (subPhase === 'summary' && this.roomState.spectatorMode) {
+      this.executeSpectatorAdvance();
+    }
+  }
+
+  private executeBotInvestmentDeclaration(): void {
+    if (!this.roomState?.gameState) return;
+
+    // Find first bot that needs to declare
+    const botIndex = this.roomState.gameState.teams.findIndex(
+      (t, i) =>
+        t.isBot &&
+        !t.isDisqualified &&
+        !(i in this.roomState!.gameState!.investmentDeclarations)
+    );
+
+    if (botIndex === -1) return;
+
+    const target = decideInvestmentTarget(this.roomState.gameState, botIndex);
+
+    this.roomState.gameState = declareInvestment(
+      this.roomState.gameState,
+      botIndex,
+      target
+    );
+
+    if (target !== null) {
+      const targetName = this.roomState.gameState.teams[target].name;
+      this.logDecision(botIndex, `wants to invest in ${targetName}`);
+    } else {
+      this.logDecision(botIndex, `passed on investing`);
+    }
+
+    this.broadcast({
+      type: 'investment-declared',
+      teamIndex: botIndex,
+    });
+
+    if (allInvestmentsDeclared(this.roomState.gameState)) {
+      this.resolveInvestmentDeclarations();
+    } else {
+      // Schedule next bot declaration
+      this.scheduleBotInvestmentDeclarations();
+    }
+  }
+
+  private executeBotInvestmentBid(): void {
+    if (!this.roomState?.gameState) return;
+
+    const target = this.roomState.gameState.investmentTieTarget;
+    if (target === null) return;
+
+    const competitors = this.roomState.gameState.investmentConflicts[target];
+    if (!competitors) return;
+
+    // Find first bot competitor that hasn't bid
+    const botIndex = competitors.find((idx) => {
+      const team = this.roomState!.gameState!.teams[idx];
+      return team.isBot && !(idx in this.roomState!.gameState!.investmentBids);
+    });
+
+    if (botIndex === undefined) return;
+
+    // Set bot ceiling if not already set
+    if (!(botIndex in this.roomState.gameState.investmentBotCeilings)) {
+      this.roomState.gameState.investmentBotCeilings[botIndex] = decideBotMaxBid();
+    }
+
+    // Find current highest bid
+    const activeBids = competitors
+      .filter((idx) => this.roomState!.gameState!.investmentBids[idx] > 0)
+      .map((idx) => this.roomState!.gameState!.investmentBids[idx]);
+    const currentHighest = activeBids.length > 0 ? Math.max(...activeBids) : 0;
+
+    const bidAmount = decideInvestmentBid(this.roomState.gameState, botIndex, currentHighest);
+
+    if (bidAmount === null) {
+      // Bot drops out
+      this.roomState.gameState = passInvestmentBid(this.roomState.gameState, botIndex);
+      this.broadcast({ type: 'investment-bid-passed', teamIndex: botIndex });
+    } else {
+      this.roomState.gameState = placeInvestmentBid(this.roomState.gameState, botIndex, bidAmount);
+      this.broadcast({ type: 'investment-bid-placed', teamIndex: botIndex, amount: bidAmount });
+    }
+
+    if (allConflictBidsPlaced(this.roomState.gameState, target)) {
+      this.resolveCurrentConflict(target);
+    } else {
+      // Schedule next bot bid
+      this.scheduleBotInvestmentBids();
+    }
+  }
+
+  private executeBotInvestmentTieResolution(): void {
+    if (!this.roomState?.gameState) return;
+
+    const target = this.roomState.gameState.investmentTieTarget;
+    if (target === null) return;
+
+    const targetTeam = this.roomState.gameState.teams[target];
+    if (!targetTeam.isBot) return;
+
+    const competitors = this.roomState.gameState.investmentConflicts[target];
+    if (!competitors) return;
+
+    // Build tied teams list
+    const activeBids = competitors
+      .filter((idx) => this.roomState!.gameState!.investmentBids[idx] > 0)
+      .map((idx) => ({ teamIndex: idx, amount: this.roomState!.gameState!.investmentBids[idx] }));
+    const maxBid = Math.max(...activeBids.map((b) => b.amount));
+    const tiedTeams = activeBids.filter((b) => b.amount === maxBid);
+
+    const chosenTeamIndex = decideInvestmentTieResolution(
+      this.roomState.gameState,
+      target,
+      tiedTeams
+    );
+
+    this.roomState.gameState = resolveInvestmentTie(
+      this.roomState.gameState,
+      target,
+      chosenTeamIndex
+    );
+
+    // Continue based on new sub-phase
+    if (this.roomState.gameState.investmentSubPhase === 'conflict') {
+      const nextTarget = this.roomState.gameState.investmentTieTarget;
+      if (nextTarget !== null) {
+        const nextCompetitors = this.roomState.gameState.investmentConflicts[nextTarget];
+        if (nextCompetitors) {
+          this.broadcast({
+            type: 'investment-conflict',
+            targetTeamIndex: nextTarget,
+            competitors: nextCompetitors,
+          });
+        }
+      }
+      this.broadcast({ type: 'game-state', state: this.roomState.gameState });
+      this.scheduleBotInvestmentBids();
+    } else if (this.roomState.gameState.investmentSubPhase === 'summary') {
+      this.broadcastInvestmentResolved();
+      this.broadcast({ type: 'game-state', state: this.roomState.gameState });
+
+      if (this.roomState.spectatorMode) {
+        this.scheduleSpectatorAutoAdvance();
+      }
     }
   }
 
@@ -1595,9 +2199,10 @@ export class GameRoom {
       turn
     );
 
-    // Broadcast the drawn exit card
+    // Log and broadcast the drawn exit card
     const updatedTeam = this.roomState.gameState.teams[turn];
     if (updatedTeam.exitChoice) {
+      this.logDecision(turn, `drew ${updatedTeam.exitChoice.name} (${updatedTeam.exitChoice.multiplier}x exit multiplier)`);
       this.broadcast({
         type: 'exit-chosen',
         teamIndex: turn,
@@ -1628,7 +2233,7 @@ export class GameRoom {
     if (!this.roomState?.gameState) return;
 
     const phase = this.roomState.gameState.phase;
-    const manualAdvancePhases = ['setup-summary', 'auction-summary'];
+    const manualAdvancePhases = ['setup-summary', 'auction-summary', 'investment'];
 
     if (!manualAdvancePhases.includes(phase)) return;
 
@@ -1665,6 +2270,11 @@ export class GameRoom {
     // Draw market card
     this.roomState.gameState = drawMarketCard(this.roomState.gameState);
 
+    const spectatorMarketCard = this.roomState.gameState.currentMarketCard;
+    if (spectatorMarketCard) {
+      this.logDecision(null, `market card drawn: ${spectatorMarketCard.name}`);
+    }
+
     // Broadcast drawn card
     this.broadcast({
       type: 'market-card-drawn',
@@ -1677,7 +2287,14 @@ export class GameRoom {
     // Apply market leader bonus
     this.roomState.gameState = applyMarketLeaderBonus(this.roomState.gameState);
 
-    // Broadcast results (bots can now see valuations before wildcard decision)
+    // Broadcast results (bots can now see capital before wildcard decision)
+    // Log round results
+    this.roomState.gameState.roundPerformance.forEach((perf) => {
+      const perfTeam = this.roomState!.gameState!.teams[perf.teamIndex];
+      const sign = perf.gain >= 0 ? '+' : '';
+      this.logDecision(perf.teamIndex, `capital ${sign}${formatLogCurrency(perf.gain)} (now ${formatLogCurrency(perfTeam.capital)})`);
+    });
+
     this.broadcast({
       type: 'market-results',
       performance: this.roomState.gameState.roundPerformance,

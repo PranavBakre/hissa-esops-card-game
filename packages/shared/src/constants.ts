@@ -15,6 +15,7 @@ export const PHASES: Phase[] = [
   'setup-summary',
   'auction',
   'auction-summary',
+  'investment',
   'seed',
   'early',
   'secondary-drop',
@@ -33,6 +34,7 @@ export const PHASE_LABELS: Record<Phase, string> = {
   'setup-summary': 'Setup Summary',
   auction: 'Auction',
   'auction-summary': 'Auction Summary',
+  investment: 'Investment',
   seed: 'Seed Round',
   early: 'Early Stage',
   'secondary-drop': 'Secondary Drop',
@@ -64,6 +66,10 @@ export const CLIENT_MESSAGE_TYPES = [
   'draw-market',
   'drop-employee',
   'select-secondary',
+  'declare-investment',
+  'place-investment-bid',
+  'pass-investment-bid',
+  'resolve-investment-tie',
   'draw-exit',
 ] as const;
 
@@ -126,18 +132,22 @@ export const GAME = {
   MAX_TEAM_COUNT: 5,
   MIN_TEAM_COUNT: 2,
   EMPLOYEES_PER_TEAM: 3,
-  INITIAL_VALUATION: 20_000_000,
+  INITIAL_CAPITAL: 20_000_000, // Capital = cash + valuation combined (used for both spending and scoring)
   INITIAL_ESOP: 12,
   SETUP_ROUNDS: 3,
   SETUP_INITIAL_HAND: 3,
   MARKET_ROUNDS: 3,
+  INVESTMENT_MIN: 500_000,
+  INVESTMENT_MAX: 1_000_000,
+  INVESTMENT_BID_INCREMENT: 50_000,
+  INVESTOR_EQUITY: 0.05,
 };
 
 // ===========================================
-// Valuation Formula Constants
+// Capital Formula Constants
 // ===========================================
 
-export const VALUATION = {
+export const CAPITAL = {
   SKILL_MULTIPLIER: 0.08,
   MIN_GROWTH_RATE: -0.3,
   MAX_GROWTH_RATE: 0.5,
