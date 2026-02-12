@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Client State (SolidJS Signals)
+// ESOP Wars v4 - Client State (SolidJS Signals)
 // ===========================================
 
 import { createSignal } from 'solid-js';

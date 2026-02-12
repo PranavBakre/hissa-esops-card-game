@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Utility Functions
+// ESOP Wars v4 - Utility Functions
 // ===========================================
 
 export function formatCurrency(value: number): string {

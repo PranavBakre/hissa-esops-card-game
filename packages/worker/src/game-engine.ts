@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Game Engine (Pure Functions)
+// ESOP Wars v4 - Game Engine (Pure Functions)
 // ===========================================
 
 import type {

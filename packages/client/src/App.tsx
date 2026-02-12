@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Root App Component
+// ESOP Wars v4 - Root App Component
 // ===========================================
 
 import { Switch, Match, onMount } from 'solid-js';

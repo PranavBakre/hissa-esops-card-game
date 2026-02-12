@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Client Entry Point (SolidJS)
+// ESOP Wars v4 - Client Entry Point (SolidJS)
 // ===========================================
 
 import { render } from 'solid-js/web';

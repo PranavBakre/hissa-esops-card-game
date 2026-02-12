@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Game Room Durable Object
+// ESOP Wars v4 - Game Room Durable Object
 // ===========================================
 
 import type {

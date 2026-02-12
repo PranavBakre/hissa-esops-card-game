@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Bot Player AI
+// ESOP Wars v4 - Bot Player AI
 // ===========================================
 
 import type {

@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - WebSocket Connection & Messages
+// ESOP Wars v4 - WebSocket Connection & Messages
 // ===========================================
 
 import type {

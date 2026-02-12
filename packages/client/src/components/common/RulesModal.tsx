@@ -180,7 +180,7 @@ export function openAboutModal(): void {
       </div>
       <div class="modal-body about-body">
         <div class="about-logo"><span class="logo-esop">ESOP</span> <span class="logo-wars">Wars</span></div>
-        <div class="about-version">v2.0</div>
+        <div class="about-version">v4.0</div>
         <p class="about-desc">A multiplayer card game about building startups, hiring talent, and surviving the market. Compete with friends or watch bots battle it out.</p>
         <div class="about-credits">
           <div class="about-row">
