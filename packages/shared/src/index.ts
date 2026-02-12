@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Shared Package Entry
+// ESOP Wars v4 - Shared Package Entry
 // ===========================================
 
 // Types

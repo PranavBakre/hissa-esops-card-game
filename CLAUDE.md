@@ -9,7 +9,7 @@ ESOP Wars is a multiplayer card game where 5 teams compete to build the highest-
 | Version     | Location    | Tech Stack                                                     |
 | ----------- | ----------- | -------------------------------------------------------------- |
 | v1 (legacy) | `v1/`       | Vanilla HTML/CSS/JS, hot-seat multiplayer, localStorage        |
-| v2 (active) | `packages/` | TypeScript monorepo, Cloudflare Workers, real-time multiplayer |
+| v4 (active) | `packages/` | TypeScript monorepo, SolidJS, Cloudflare Workers, real-time multiplayer |
 
 ## Documentation
 
@@ -18,16 +18,15 @@ ESOP Wars is a multiplayer card game where 5 teams compete to build the highest-
 | `rules/code_organization.md`      | Documentation workflow, feature-map tagging system |
 | `docs/architecture.md`            | v1 code structure, game state shape, phase flow    |
 | `docs/feature-map.md`             | v1 features and functions                          |
-| `docs/archive/`                   | Implemented feature docs (v2 build, bots, etc.)    |
-| `docs/ideas/v2-ui-facelift.md`    | UI redesign, player guidance, rulebook, design system |
+| `docs/archive/`                   | Implemented feature docs (v2/v3 build, bots, etc.) |
 
-## v2 Source Files (packages/)
+## v4 Source Files (packages/)
 
 | Package            | Purpose                                      |
 | ------------------ | -------------------------------------------- |
 | `packages/shared/` | Shared types and constants                   |
 | `packages/worker/` | Cloudflare Workers + Durable Objects backend |
-| `packages/client/` | Vite + TypeScript frontend                   |
+| `packages/client/` | Vite + SolidJS + TypeScript frontend         |
 
 ## v1 Source Files (v1/)
 

@@ -11,10 +11,12 @@
     "deploy": "npm run build && wrangler pages deploy dist --project-name=esop-wars --commit-dirty=true"
   },
   "dependencies": {
-    "@esop-wars/shared": "*"
+    "@esop-wars/shared": "*",
+    "solid-js": "^1.9.11"
   },
   "devDependencies": {
     "typescript": "^5.7.3",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vite-plugin-solid": "^2.11.10"
   }
 }

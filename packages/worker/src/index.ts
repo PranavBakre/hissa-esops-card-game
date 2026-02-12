@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Worker Entry Point
+// ESOP Wars v4 - Worker Entry Point
 // ===========================================
 
 import { ROOM_CODE_CHARS, ROOM_CODE_LENGTH } from '@esop-wars/shared';

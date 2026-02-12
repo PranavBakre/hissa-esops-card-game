@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Shared Constants
+// ESOP Wars v4 - Shared Constants
 // ===========================================
 
 import type { Phase, EmployeeCategory, GameSpeed } from './types';

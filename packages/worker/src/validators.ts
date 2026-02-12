@@ -1,5 +1,5 @@
 // ===========================================
-// ESOP Wars v2 - Action Validators
+// ESOP Wars v4 - Action Validators
 // ===========================================
 
 import type {
